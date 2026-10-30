@@ -1,0 +1,28 @@
+ESTUDIO PREVIO
+Proceso de contratacion - Procuraduria General de la Nacion
+
+Entidad: Procuraduria General de la Nacion
+Proceso: AGL-2026-PGN41
+Objeto: Adquisicion, implementacion y soporte tecnologico (soluciones audiovisuales, equipos de computo y perifericos) para la Procuraduria General de la Nacion
+Modalidad de seleccion: Seleccion abreviada - Bolsa de Productos (BMC)
+
+Presupuesto
+Valor total sin IVA: $51.460.675.487
+Valor total con IVA y costos: $61.587.261.594
+CDP No. 40626 por valor de $61.587.261.594
+
+Cronograma
+Fecha de publicacion: 10/06/2026
+Fecha de cierre: 20/06/2026
+Plazo de ejecucion: 180 dias
+
+Experiencia exigida: Suministro de minimo 500 equipos mas la implementacion de una plataforma de audiencias virtuales en un unico contrato previo.
+
+Garantias: Cumplimiento 20%, calidad de los bienes 20%, salarios y prestaciones 5%
+
+Items / bienes a adquirir:
+1. Computador todo en uno (AIO) avanzado, 23.8 pulgadas FHD, o equivalente - Cantidad: 3500 - Marca: Abierta (o equivalente)
+2. Monitor profesional 27 pulgadas, panel IPS, o equivalente - Cantidad: 800 - Marca: Abierta (o equivalente)
+3. Estacion de trabajo Mac Studio M3 Ultra - Cantidad: 5 - Marca: Apple
+4. Portatil MacBook Pro M5 - Cantidad: 20 - Marca: Apple
+5. Tableta iPad M5 - Cantidad: 15 - Marca: Apple

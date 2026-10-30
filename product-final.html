@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src https://cdn.tailwindcss.com 'unsafe-inline' 'unsafe-eval'; style-src https://cdn.tailwindcss.com 'unsafe-inline'; img-src data:; font-src data:; media-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+<title>AgilIA · Demo PGN</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>[hidden]{display:none!important}html,body{height:100%;margin:0}body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}</style>
+</head>
+<body>
+<div class="h-screen w-screen overflow-hidden bg-slate-100 text-slate-800 flex text-[13px]">
+
+  <!-- Sidebar -->
+  <aside class="w-56 shrink-0 bg-slate-900 text-slate-300 flex flex-col">
+    <div class="px-4 py-4 flex items-center gap-2 border-b border-slate-800">
+      <div class="w-8 h-8 rounded-lg bg-emerald-500 text-white font-bold flex items-center justify-center">A</div>
+      <div>
+        <div class="text-white font-semibold leading-tight">AgilIA</div>
+        <div class="text-[10px] text-slate-400 leading-tight">Mercado de Compras Públicas</div>
+      </div>
+    </div>
+    <div class="px-4 pt-4 pb-1 text-[10px] uppercase tracking-wider text-slate-500">Proceso AGL-2026-PGN41</div>
+    <nav class="px-2 space-y-1">
+      <button data-go="cargar" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 aria-[current=true]:bg-emerald-600 aria-[current=true]:text-white flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-slate-700 text-[10px] flex items-center justify-center">1</span>Cargar documentos</button>
+      <button data-go="datos" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 aria-[current=true]:bg-emerald-600 aria-[current=true]:text-white flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-slate-700 text-[10px] flex items-center justify-center">2</span>Datos y preguntas</button>
+      <button data-go="borradores" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 aria-[current=true]:bg-emerald-600 aria-[current=true]:text-white flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-slate-700 text-[10px] flex items-center justify-center">3</span>Borradores y alertas</button>
+      <button data-go="exportar" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 aria-[current=true]:bg-emerald-600 aria-[current=true]:text-white flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-slate-700 text-[10px] flex items-center justify-center">4</span>Validar y exportar</button>
+    </nav>
+    <div class="mt-auto p-3 m-3 rounded-lg bg-slate-800 text-[11px]">
+      <div class="text-slate-400">Sesión iniciada</div>
+      <div class="flex items-center gap-2 mt-1"><span class="w-7 h-7 rounded-full bg-indigo-500 text-white flex items-center justify-center font-semibold">JP</span><div><div class="text-white leading-tight">Juan S. Poveda</div><div class="text-slate-400 leading-tight">Oficina de Tecnología · PGN</div></div></div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-1 min-w-0 flex flex-col">
+    <header class="h-12 shrink-0 bg-white border-b border-slate-200 px-6 flex items-center justify-between">
+      <div class="flex items-center gap-2 text-slate-500 min-w-0"><span class="shrink-0">Procuraduría General de la Nación</span><span>›</span><span class="font-medium text-slate-800 truncate">Adquisición, implementación y soporte tecnológico (cómputo, audiovisuales y periféricos)</span></div>
+      <div class="flex items-center gap-2 text-[11px] shrink-0"><span class="px-2 py-1 rounded-full bg-amber-100 text-amber-700">Borrador v0.3</span><span class="px-2 py-1 rounded-full bg-slate-100 text-slate-600">🔒 Portal autorizado</span></div>
+    </header>
+
+    <div data-screens class="flex-1 min-h-0">
+
+      <!-- Screen 1 -->
+      <section id="cargar" data-screen class="h-full p-5 overflow-y-auto">
+        <h1 class="text-xl font-bold">Prepare su adquisición sin empezar desde cero</h1>
+        <p class="text-slate-500 mb-4">Suba el estudio previo y sus anexos. AgilIA extrae los datos y arma los documentos del proceso: FTN, FTP y Carta de Intención para la Bolsa Mercantil.</p>
+        <div class="grid grid-cols-5 gap-4">
+          <div class="col-span-2 bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+            <div class="font-semibold">1 · Identifique la operación</div>
+            <div><div class="text-[11px] text-slate-500">Entidad</div><div class="border rounded-lg px-3 py-2 bg-slate-50">Procuraduría General de la Nación</div></div>
+            <div>
+              <div class="text-[11px] text-slate-500">ID del proceso <span class="text-slate-400">(generado automáticamente)</span></div>
+              <div class="border rounded-lg px-3 py-2 bg-slate-50 flex items-center gap-2">
+                <span class="font-mono font-semibold text-slate-800">AGL-2026-PGN41</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Asignado</span>
+              </div>
+              <div class="text-[11px] text-slate-400 mt-1">Con este identificador se referencia el proceso en todo el flujo.</div>
+            </div>
+            <div><div class="text-[11px] text-slate-500">Modalidad detectada</div><div class="border rounded-lg px-3 py-2 bg-slate-50">Selección abreviada · Bolsa de Productos (BMC)</div></div>
+            <div class="rounded-lg bg-indigo-50 text-indigo-700 p-3 text-[12px]">💡 Aunque no domine las fichas FTN y FTP, le iremos guiando campo por campo.</div>
+          </div>
+          <div class="col-span-3 bg-white rounded-xl border border-slate-200 p-4">
+            <div class="font-semibold mb-2">2 · Cargue los documentos</div>
+
+            <!-- Documentos obligatorios -->
+            <div class="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3 mb-3">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Documentos obligatorios</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-700">Requerido</span>
+                </div>
+                <span class="text-[11px] text-emerald-700">1 / 1 cargado</span>
+              </div>
+              <div class="text-[11px] text-slate-500 mb-2">El <b>estudio previo</b> es el documento de referencia: sobre él se basa la extracción y el razonamiento de AgilIA.</div>
+              <div class="flex items-center gap-3 border border-emerald-300 bg-white rounded-lg px-3 py-2">
+                <span class="text-lg">📄</span>
+                <div class="flex-1">
+                  <div class="font-medium">Estudios_previos_PGN_tecnologia_2026.pdf <span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 align-middle">Documento de referencia</span></div>
+                  <div class="text-[11px] text-slate-500">90 páginas · 6,4 MB</div>
+                </div>
+                <span class="text-emerald-600 text-[12px]">✓ Listo</span>
+              </div>
+            </div>
+
+            <!-- Anexos opcionales -->
+            <div class="rounded-xl border border-slate-200 p-3 mb-3">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-[11px] font-semibold uppercase tracking-wide text-slate-600">Anexos</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">Opcional</span>
+                </div>
+                <span class="text-[11px] text-slate-500">2 cargados</span>
+              </div>
+              <div class="border-2 border-dashed border-slate-300 bg-slate-50 rounded-xl py-4 text-center mb-2">
+                <div class="text-2xl">☁️⬆️</div>
+                <div class="font-medium">Arrastre anexos aquí o <span class="text-emerald-700 underline">búsquelos</span></div>
+                <div class="text-[11px] text-slate-500">PDF, Word, Excel o imágenes escaneadas</div>
+              </div>
+              <div class="space-y-2">
+                <div class="flex items-center gap-3 border rounded-lg px-3 py-2"><span class="text-lg">📊</span><div class="flex-1"><div class="font-medium">Anexo_1_Analisis_del_sector.xlsx</div><div class="text-[11px] text-slate-500">4 hojas · 320 KB</div></div><span class="text-emerald-600 text-[12px]">✓ Listo</span></div>
+                <div class="flex items-center gap-3 border rounded-lg px-3 py-2"><span class="text-lg">🧾</span><div class="flex-1"><div class="font-medium">CDP_40626_disponibilidad_presupuestal.pdf</div><div class="text-[11px] text-slate-500">2 páginas · 410 KB</div></div><span class="text-emerald-600 text-[12px]">✓ Listo</span></div>
+              </div>
+            </div>
+
+            <div class="flex justify-end"><button data-go="datos" class="px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Analizar documentos →</button></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Screen 2 -->
+      <section id="datos" data-screen hidden class="h-full p-5 overflow-y-auto">
+        <div class="flex items-center justify-between mb-3">
+          <div><h1 class="text-xl font-bold">Esto es lo que encontramos</h1><p class="text-slate-500">Cada dato muestra su fuente y su ubicación exacta. Confirme o corrija antes de continuar.</p></div>
+          <div class="flex gap-2 text-[11px]"><span class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">7 identificados</span><span class="px-2 py-1 rounded-full bg-amber-100 text-amber-700">3 por revisar</span></div>
+        </div>
+        <div class="grid grid-cols-5 gap-4">
+          <div class="col-span-3 bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <table class="w-full text-left">
+              <thead class="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th class="px-3 py-2">Dato</th><th class="px-3 py-2">Valor extraído</th><th class="px-3 py-2">Fuente</th><th class="px-3 py-2">Ubicación</th><th class="px-3 py-2"></th></tr></thead>
+              <tbody class="divide-y">
+                <tr><td class="px-3 py-2 text-slate-500">Objeto</td><td class="px-3 py-2 font-medium">Adquisición, implementación y soporte tecnológico (audiovisuales, cómputo y periféricos)</td><td class="px-3 py-2 text-[11px] text-indigo-600">Estudio previo</td><td class="px-3 py-2 text-[11px] text-slate-500 whitespace-nowrap">📄 pág. 21 · § 4.1</td><td class="px-3 py-2 text-emerald-600">✓</td></tr>
+                <tr><td class="px-3 py-2 text-slate-500">Presupuesto (sin IVA)</td><td class="px-3 py-2 font-medium">$51.460.675.487 COP</td><td class="px-3 py-2 text-[11px] text-indigo-600">Estudio previo</td><td class="px-3 py-2 text-[11px] text-slate-500 whitespace-nowrap">📄 pág. 53 · § 7</td><td class="px-3 py-2 text-emerald-600">✓</td></tr>
+                <tr><td class="px-3 py-2 text-slate-500">Presupuesto total (con IVA y costos)</td><td class="px-3 py-2 font-medium">$61.587.261.594 COP</td><td class="px-3 py-2 text-[11px] text-indigo-600">Estudio previo</td><td class="px-3 py-2 text-[11px] text-slate-500 whitespace-nowrap">📄 pág. 54</td><td class="px-3 py-2 text-emerald-600">✓</td></tr>
+                <tr><td class="px-3 py-2 text-slate-500">CDP</td><td class="px-3 py-2 font-medium">N.º 40626 del 10/06/2026</td><td class="px-3 py-2 text-[11px] text-indigo-600">CDP</td><td class="px-3 py-2 text-[11px] text-slate-500 whitespace-nowrap">📄 pág. 1</td><td class="px-3 py-2 text-emerald-600">✓</td></tr>
+                <tr><td class="px-3 py-2 text-slate-500">Ítem principal</td><td class="px-3 py-2 font-medium">3.500 computadores AIO avanzado</td><td class="px-3 py-2 text-[11px] text-indigo-600">Anexo técnico</td><td class="px-3 py-2 text-[11px] text-slate-500 whitespace-nowrap">📊 ítem 1 · pág. 22</td><td class="px-3 py-2 text-emerald-600">✓</td></tr>
+                <tr><td class="px-3 py-2 text-slate-500">Plazo de entrega</td><td class="px-3 py-2 font-medium">Hasta el 05 de diciembre de 2026</td><td class="px-3 py-2 text-[11px] text-indigo-600">Estudio previo</td><td class="px-3 py-2 text-[11px] text-slate-500 whitespace-nowrap">📄 pág. 79 · § 16.6</td><td class="px-3 py-2 text-emerald-600">✓</td></tr>
+                <tr><td class="px-3 py-2 text-slate-500">Especificación ítems 3-5</td><td class="px-3 py-2 font-medium">Mac Studio / MacBook / iPad (marca)</td><td class="px-3 py-2 text-[11px] text-indigo-600">Carta de intención</td><td class="px-3 py-2 text-[11px] text-slate-500 whitespace-nowrap">📄 pág. 2-3</td><td class="px-3 py-2 text-amber-600">⚠ Revisar</td></tr>
+                <tr><td class="px-3 py-2 text-slate-500">Experiencia exigida</td><td class="px-3 py-2 font-medium">Suministro ≥ 500 equipos + plataforma de audiencias</td><td class="px-3 py-2 text-[11px] text-indigo-600">Estudio previo</td><td class="px-3 py-2 text-[11px] text-slate-500 whitespace-nowrap">📄 pág. 66 · § 12.1</td><td class="px-3 py-2 text-amber-600">⚠ Justificar</td></tr>
+              </tbody>
+            </table>
+            <div class="px-3 py-2 bg-slate-50 text-[11px] text-slate-500 flex justify-between"><span>Haga clic en un valor para corregirlo</span><button data-toggle="okdatos" class="text-emerald-700 font-medium">Confirmar todos los datos</button></div>
+            <div id="okdatos" hidden class="px-3 py-2 bg-emerald-50 text-emerald-700 text-[12px]">✓ Datos confirmados por Juan S. Poveda · registrado en el historial</div>
+          </div>
+          <div class="col-span-2 bg-white rounded-xl border border-slate-200 p-4">
+            <div class="font-semibold mb-1">🧭 Preguntas sobre lo que falta</div>
+            <p class="text-[11px] text-slate-500 mb-3">Solo preguntamos lo que no pudimos deducir del estudio previo.</p>
+            <div class="space-y-3">
+              <div><div class="font-medium mb-1">1. Modalidad de puja</div><div class="flex gap-2 flex-wrap"><span class="px-3 py-1 rounded-full border-2 border-emerald-500 bg-emerald-50">Precio por conjunto</span><span class="px-3 py-1 rounded-full border">Por precio</span><span class="px-3 py-1 rounded-full border">Por cantidad</span></div></div>
+              <div><div class="font-medium mb-1">2. Comisión máxima a la SCB</div><div class="border rounded-lg px-3 py-2 bg-slate-50 text-slate-500">0,06 % sobre el valor de la operación…</div></div>
+              <div><div class="font-medium mb-1">3. ¿Por qué se exige marca específica (Mac) en ítems 3-5?</div><div class="border rounded-lg px-3 py-2 bg-amber-50 text-amber-800 text-[12px]">Aún sin justificación. AgilIA sugerirá redacción por especificaciones abiertas que no limiten la participación.</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="flex justify-between mt-4">
+          <button data-go="cargar" class="px-4 py-2 rounded-lg border bg-white">← Volver</button>
+          <button data-go="borradores" class="px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">✨ Generar los 3 documentos →</button>
+        </div>
+      </section>
+
+      <!-- Screen 3 -->
+      <section id="borradores" data-screen hidden class="h-full p-5 flex flex-col">
+        <div class="flex items-center justify-between mb-3 shrink-0">
+          <div><h1 class="text-xl font-bold">Borradores y verificación cruzada</h1><p class="text-slate-500">AgilIA marca contradicciones y riesgos. Cada sugerencia es una <b>posibilidad editable</b>, no una instrucción: usted decide si aplica, ajusta o la justifica.</p></div>
+          <div class="flex gap-2 text-[11px]"><span class="px-2 py-1 rounded-full bg-red-100 text-red-700">1 crítico</span><span class="px-2 py-1 rounded-full bg-amber-100 text-amber-700">2 advertencias</span></div>
+        </div>
+        <div class="grid grid-cols-5 gap-4 flex-1 min-h-0">
+          <div class="col-span-3 bg-white rounded-xl border border-slate-200 flex flex-col min-h-0">
+            <div class="flex border-b text-[12px] shrink-0">
+              <button data-tab="p-ftn" aria-selected="true" class="px-4 py-2.5 border-b-2 border-transparent text-slate-500 aria-selected:border-emerald-600 aria-selected:text-emerald-700 aria-selected:font-semibold">FTN · Negociación</button>
+              <button data-tab="p-ftp" class="px-4 py-2.5 border-b-2 border-transparent text-slate-500 aria-selected:border-emerald-600 aria-selected:text-emerald-700 aria-selected:font-semibold">FTP · Producto</button>
+              <button data-tab="p-comp" class="px-4 py-2.5 border-b-2 border-transparent text-slate-500 aria-selected:border-emerald-600 aria-selected:text-emerald-700 aria-selected:font-semibold">Carta de intención</button>
+            </div>
+            <div class="flex-1 min-h-0 overflow-y-auto p-4">
+              <div id="p-ftn" data-panel>
+                <div class="text-[11px] text-slate-400 mb-2 flex items-center gap-2">Ficha Técnica de Negociación · 57 ítems · puja por precio por conjunto <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">✎ Campos editables</span></div>
+                <div class="space-y-2">
+                  <div class="border rounded-lg p-2.5"><div class="text-[11px] text-slate-500">Objeto</div><div contenteditable="true" class="outline-none focus:ring-1 focus:ring-emerald-400 rounded px-0.5">Adquisición, implementación y soporte tecnológico que incluya soluciones audiovisuales, equipos de cómputo y periféricos para la PGN</div></div>
+                  <div class="border rounded-lg p-2.5"><div class="text-[11px] text-slate-500">Modalidad de puja</div><div contenteditable="true" class="outline-none focus:ring-1 focus:ring-emerald-400 rounded px-0.5">Puja por precio por conjunto de bienes · 1 sola operación</div></div>
+                  <div class="border-2 border-red-300 bg-red-50 rounded-lg p-2.5"><div class="text-[11px] text-red-600">Valor máximo · ⚠ difiere del total en Carta de Intención</div><div contenteditable="true" class="outline-none focus:ring-1 focus:ring-emerald-400 rounded px-0.5"><b>$51.460.675.487</b> (sin IVA)</div></div>
+                  <div class="border rounded-lg p-2.5"><div class="text-[11px] text-slate-500">Plazo de ejecución</div><div contenteditable="true" class="outline-none focus:ring-1 focus:ring-emerald-400 rounded px-0.5">Hasta el 05 de diciembre de 2026</div></div>
+                  <div class="border rounded-lg p-2.5"><div class="text-[11px] text-slate-500">Forma de pago</div><div contenteditable="true" class="outline-none focus:ring-1 focus:ring-emerald-400 rounded px-0.5">60 % contra entrega de bienes (ítems 1-32) · 40 % contra entrega de servicios y sala de audiencias (ítems 33-57)</div></div>
+                </div>
+              </div>
+              <div id="p-ftp" data-panel hidden>
+                <div class="text-[11px] text-slate-400 mb-2 flex items-center gap-2">Ficha Técnica de Producto · especificaciones mínimas por ítem <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">✎ Campos editables</span></div>
+                <div class="space-y-2">
+                  <div class="border rounded-lg p-2.5"><div class="text-[11px] text-slate-500">Ítem 1 · Computador AIO avanzado</div><div contenteditable="true" class="outline-none focus:ring-1 focus:ring-emerald-400 rounded px-0.5"><b>3.500</b> und · 23.8" FHD · 14 núcleos · 16 GB DDR5 · 1 TB SSD · Win 11 Pro</div></div>
+                  <div class="border-2 border-amber-300 bg-amber-50 rounded-lg p-2.5"><div class="text-[11px] text-amber-700">Ítem 3-5 · ⚠ marca cerrada (Mac Studio / MacBook / iPad)</div><div contenteditable="true" class="outline-none focus:ring-1 focus:ring-emerald-400 rounded px-0.5">Mac Studio M3 Ultra · MacBook Pro M5 · iPad M5</div></div>
+                  <div class="border rounded-lg p-2.5"><div class="text-[11px] text-slate-500">Ítem 2 · Workstation IA</div><div contenteditable="true" class="outline-none focus:ring-1 focus:ring-emerald-400 rounded px-0.5">23 und · 24 núcleos · 128 GB DDR5 ECC · GPU Pro 48 GB · 4 TB NVMe</div></div>
+                  <div class="border rounded-lg p-2.5"><div class="text-[11px] text-slate-500">Ítem 50 · Software de audiencias</div><div contenteditable="true" class="outline-none focus:ring-1 focus:ring-emerald-400 rounded px-0.5">62 licencias · captura, transcripción y certificación · on-premise</div></div>
+                  <div class="border rounded-lg p-2.5"><div class="text-[11px] text-slate-500">Garantía general</div><div contenteditable="true" class="outline-none focus:ring-1 focus:ring-emerald-400 rounded px-0.5">3 años on-site (incluye garantía extendida)</div></div>
+                </div>
+              </div>
+              <div id="p-comp" data-panel hidden>
+                <div class="text-[11px] text-slate-400 mb-2 flex items-center gap-2">Carta de Intención a la BMC · condiciones del comisionista <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">✎ Campos editables</span></div>
+                <div class="space-y-2">
+                  <div class="border rounded-lg p-2.5"><div class="text-[11px] text-slate-500">Dirigida a</div><div contenteditable="true" class="outline-none focus:ring-1 focus:ring-emerald-400 rounded px-0.5">Vicepresidencia de Operaciones · BMC Bolsa Mercantil de Colombia S.A.</div></div>
+                  <div class="border rounded-lg p-2.5"><div class="text-[11px] text-slate-500">Comisión máxima a la SCB</div><div contenteditable="true" class="outline-none focus:ring-1 focus:ring-emerald-400 rounded px-0.5">0,06 % sobre el valor de la operación</div></div>
+                  <div class="border rounded-lg p-2.5"><div class="text-[11px] text-slate-500">Metodología de selección del comisionista</div><div contenteditable="true" class="outline-none focus:ring-1 focus:ring-emerald-400 rounded px-0.5">Oferta más cercana a la media geométrica</div></div>
+                  <div class="border-2 border-amber-300 bg-amber-50 rounded-lg p-2.5"><div class="text-[11px] text-amber-700">Experiencia del comitente · ⚠ posible restricción</div><div contenteditable="true" class="outline-none focus:ring-1 focus:ring-emerald-400 rounded px-0.5">Suministro de mínimo 500 equipos + una implementación de plataforma de audiencias (últimos 5 años)</div></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-span-2 flex flex-col gap-2 min-h-0 overflow-y-auto">
+            <div class="text-[11px] text-slate-500 bg-slate-50 border rounded-lg px-3 py-2 shrink-0">
+              Cada alerta trae una <b>sugerencia alternativa editable</b>. Indique si la sugerencia es correcta o no (se registra en la base de conocimiento) y, si mantiene el requisito, adjunte su justificación.
+            </div>
+
+            <!-- Alerta 1 -->
+            <div class="bg-white rounded-xl border-l-4 border-red-500 border border-slate-200 p-3">
+              <div class="flex justify-between items-start"><b>🔴 Valor máximo FTN vs total de la Carta</b><span class="text-[10px] text-slate-400">Crítico</span></div>
+              <div class="flex items-center gap-2 my-1">
+                <span class="text-[10px] text-slate-400">Confiabilidad de la sugerencia</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 font-semibold">Alta · 97%</span>
+                <div class="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-emerald-500" style="width:97%"></div></div>
+              </div>
+              <div class="text-[11px] text-slate-500 mb-1">Evidencia: FTN "$51.460.675.487 sin IVA" · Carta "$61.587.261.594 con IVA y costos"</div>
+              <div class="text-[11px] p-2 rounded bg-slate-50 mb-2"><span class="text-slate-400">Sugerencia (editable):</span> <span contenteditable="true" class="outline-none focus:bg-white focus:ring-1 focus:ring-emerald-400 rounded px-0.5">Dejar explícito que la FTN usa valor sin IVA y la Carta el total con IVA y costos de bolsa, para evitar interpretaciones.</span></div>
+              <div class="flex gap-2 items-center flex-wrap">
+                <span class="text-[10px] text-slate-400 w-full">¿La sugerencia es correcta?</span>
+                <button data-toggle="f1good" class="px-2.5 py-1 rounded border border-emerald-300 text-emerald-700 text-[11px]">👍 Correcta</button>
+                <button data-toggle="f1bad" class="px-2.5 py-1 rounded border border-red-300 text-red-700 text-[11px]">👎 No aplica</button>
+                <span id="f1good" hidden class="text-[11px] text-emerald-700">✓ Validada · enviada a base de conocimiento</span>
+                <span id="f1bad" hidden class="text-[11px] text-red-700">✗ Descartada · registrada en base de conocimiento</span>
+              </div>
+            </div>
+
+            <!-- Alerta 2 -->
+            <div class="bg-white rounded-xl border-l-4 border-amber-500 border border-slate-200 p-3">
+              <div class="flex justify-between items-start"><b>🟠 Marca específica (Mac) restringe la competencia</b><span class="text-[10px] text-slate-400">Advertencia</span></div>
+              <div class="flex items-center gap-2 my-1">
+                <span class="text-[10px] text-slate-400">Confiabilidad de la sugerencia</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">Media · 74%</span>
+                <div class="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-amber-500" style="width:74%"></div></div>
+              </div>
+              <div class="text-[11px] text-slate-500 mb-1">Evidencia: ítems 3, 4 y 5 describen "Mac Studio M3 Ultra", "MacBook Pro M5" e "iPad M5".</div>
+              <div class="text-[11px] p-2 rounded bg-slate-50 mb-2"><span class="text-slate-400">Sugerencia (editable):</span> <span contenteditable="true" class="outline-none focus:bg-white focus:ring-1 focus:ring-emerald-400 rounded px-0.5">Redactar por especificaciones técnicas mínimas (CPU/GPU/Neural Engine, pantalla, RAM, SSD) "o equivalente", sin nombrar marca.</span></div>
+              <div class="mb-2">
+                <div class="text-[10px] text-slate-400 mb-1">Justificación de la evidencia (si mantiene la marca/ecosistema)</div>
+                <textarea rows="2" placeholder="Explique por qué se requiere ese ecosistema específico (p. ej. compatibilidad con flujos de diseño/edición existentes)…" class="w-full border rounded-lg px-2 py-1.5 text-[11px] bg-amber-50/40 outline-none focus:ring-1 focus:ring-amber-400"></textarea>
+              </div>
+              <div class="flex gap-2 items-center flex-wrap">
+                <span class="text-[10px] text-slate-400 w-full">¿La sugerencia es correcta?</span>
+                <button data-toggle="f2good" class="px-2.5 py-1 rounded border border-emerald-300 text-emerald-700 text-[11px]">👍 Correcta</button>
+                <button data-toggle="f2bad" class="px-2.5 py-1 rounded border border-red-300 text-red-700 text-[11px]">👎 No aplica</button>
+                <span id="f2good" hidden class="text-[11px] text-emerald-700">✓ Validada · enviada a base de conocimiento</span>
+                <span id="f2bad" hidden class="text-[11px] text-red-700">✗ Descartada · registrada en base de conocimiento</span>
+              </div>
+            </div>
+
+            <!-- Alerta 3 -->
+            <div class="bg-white rounded-xl border-l-4 border-amber-500 border border-slate-200 p-3">
+              <div class="flex justify-between items-start"><b>🟠 Experiencia específica podría limitar oferentes</b><span class="text-[10px] text-slate-400">Advertencia</span></div>
+              <div class="flex items-center gap-2 my-1">
+                <span class="text-[10px] text-slate-400">Confiabilidad de la sugerencia</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">Media · 69%</span>
+                <div class="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden"><div class="h-full bg-amber-500" style="width:69%"></div></div>
+              </div>
+              <div class="text-[11px] text-slate-500 mb-1">Evidencia: exige ≥ 500 equipos de cómputo <b>y</b> una implementación de plataforma de gestión de audiencias en 5 años.</div>
+              <div class="text-[11px] p-2 rounded bg-slate-50 mb-2"><span class="text-slate-400">Sugerencia (editable):</span> <span contenteditable="true" class="outline-none focus:bg-white focus:ring-1 focus:ring-emerald-400 rounded px-0.5">Permitir acreditar la experiencia específica entre varios integrantes del proponente plural (consorcio/UT).</span></div>
+              <div class="mb-2">
+                <div class="text-[10px] text-slate-400 mb-1">Justificación de la evidencia (si mantiene el requisito)</div>
+                <textarea rows="2" placeholder="Explique por qué se requiere esa experiencia específica dada la criticidad y el volumen del proyecto…" class="w-full border rounded-lg px-2 py-1.5 text-[11px] bg-amber-50/40 outline-none focus:ring-1 focus:ring-amber-400"></textarea>
+              </div>
+              <div class="flex gap-2 items-center flex-wrap">
+                <span class="text-[10px] text-slate-400 w-full">¿La sugerencia es correcta?</span>
+                <button data-toggle="f3good" class="px-2.5 py-1 rounded border border-emerald-300 text-emerald-700 text-[11px]">👍 Correcta</button>
+                <button data-toggle="f3bad" class="px-2.5 py-1 rounded border border-red-300 text-red-700 text-[11px]">👎 No aplica</button>
+                <span id="f3good" hidden class="text-[11px] text-emerald-700">✓ Validada · enviada a base de conocimiento</span>
+                <span id="f3bad" hidden class="text-[11px] text-red-700">✗ Descartada · registrada en base de conocimiento</span>
+              </div>
+            </div>
+
+            <button data-go="exportar" class="mt-auto px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Continuar a validación →</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Screen 4 -->
+      <section id="exportar" data-screen hidden class="h-full p-5 overflow-y-auto">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-11 h-11 rounded-full bg-emerald-100 text-2xl flex items-center justify-center">✅</div>
+          <div><h1 class="text-xl font-bold">Paquete listo para validar y radicar</h1><p class="text-slate-500">Revise el resumen, valide y exporte los archivos editables para la Bolsa Mercantil.</p></div>
+        </div>
+        <div class="grid grid-cols-3 gap-4 mb-4">
+          <div class="bg-white rounded-xl border p-4"><div class="text-[11px] text-slate-500">Coherencia FTN / FTP / Carta</div><div class="text-2xl font-bold text-emerald-600">100 %</div><div class="text-[11px] text-slate-500">0 hallazgos críticos abiertos</div></div>
+          <div class="bg-white rounded-xl border p-4"><div class="text-[11px] text-slate-500">Ítems del conjunto</div><div class="text-2xl font-bold">57 / 57</div><div class="text-[11px] text-emerald-600">cantidades conciliadas</div></div>
+          <div class="bg-white rounded-xl border p-4"><div class="text-[11px] text-slate-500">Trazabilidad</div><div class="text-2xl font-bold text-indigo-600">11 cambios</div><div class="text-[11px] text-slate-500">con documento, ubicación y motivo</div></div>
+        </div>
+        <div class="grid grid-cols-5 gap-4">
+          <div class="col-span-3 bg-white rounded-xl border overflow-hidden">
+            <div class="px-4 py-2 font-semibold border-b">Registro de decisiones</div>
+            <table class="w-full text-left text-[12px]">
+              <tbody class="divide-y">
+                <tr><td class="px-4 py-2">Valor: FTN sin IVA / Carta con IVA aclarado</td><td class="px-2 text-slate-400">FTN · § 4</td><td class="px-2"><span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Aceptada</span></td></tr>
+                <tr><td class="px-4 py-2">Ítems 3-5: especificación abierta "o equivalente"</td><td class="px-2 text-slate-400">FTP · ítems 3-5</td><td class="px-2"><span class="px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">Modificada</span></td></tr>
+                <tr><td class="px-4 py-2">Experiencia acreditable por proponente plural</td><td class="px-2 text-slate-400">Carta · § 12.1</td><td class="px-2"><span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Aceptada</span></td></tr>
+                <tr><td class="px-4 py-2">Marca Mac en ítems 3-5 (justificación anexada)</td><td class="px-2 text-slate-400">FTP · ítems 3-5</td><td class="px-2"><span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Justificada</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="col-span-2 bg-white rounded-xl border p-4">
+            <div class="font-semibold mb-2">Exportar archivos editables</div>
+            <div class="space-y-2 mb-3">
+              <div class="flex items-center gap-2 border rounded-lg px-3 py-1.5">📝 <span class="flex-1">FTN_AGL-2026-PGN41.docx</span><span class="text-[11px] text-slate-400">v1</span></div>
+              <div class="flex items-center gap-2 border rounded-lg px-3 py-1.5">📝 <span class="flex-1">FTP_AGL-2026-PGN41.docx</span><span class="text-[11px] text-slate-400">v1</span></div>
+              <div class="flex items-center gap-2 border rounded-lg px-3 py-1.5">📝 <span class="flex-1">Carta_intencion_BMC_AGL-2026-PGN41.docx</span><span class="text-[11px] text-slate-400">v1</span></div>
+            </div>
+            <button data-toggle="exok" class="w-full px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Validar y exportar paquete</button>
+            <div id="exok" hidden class="mt-2 p-2 rounded-lg bg-emerald-50 text-emerald-700 text-[12px]">✓ Paquete validado por la entidad. Descarga lista junto con el registro de decisiones y justificaciones.</div>
+            <button data-go="cargar" class="w-full mt-2 text-[12px] text-slate-500 underline">Iniciar otra operación</button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+<script>
+(function(){
+  function sync(){
+    var g=document.querySelectorAll('[data-go]');
+    for(var i=0;i<g.length;i++){var t=document.getElementById(g[i].getAttribute('data-go'));g[i].setAttribute('aria-current',t&&!t.hidden?'true':'false');}
+    var b=document.querySelectorAll('[data-tab]');
+    for(var j=0;j<b.length;j++){var p=document.getElementById(b[j].getAttribute('data-tab'));b[j].setAttribute('aria-selected',p&&!p.hidden?'true':'false');}
+  }
+  function only(target,attr){
+    if(target.hasAttribute(attr)){
+      var sib=target.parentElement?target.parentElement.children:[];
+      for(var i=0;i<sib.length;i++){if(sib[i].hasAttribute(attr))sib[i].hidden=(sib[i]!==target);}
+    }
+    target.hidden=false;
+  }
+  document.addEventListener('click',function(e){
+    var el=e.target&&e.target.closest?e.target.closest('[data-go],[data-tab],[data-toggle]'):null;
+    if(!el)return;
+    var id,t;
+    if(el.hasAttribute('data-go')){id=el.getAttribute('data-go');t=document.getElementById(id);if(t){only(t,'data-screen');e.preventDefault();}}
+    else if(el.hasAttribute('data-tab')){id=el.getAttribute('data-tab');t=document.getElementById(id);if(t){only(t,'data-panel');e.preventDefault();}}
+    else if(el.hasAttribute('data-toggle')){id=el.getAttribute('data-toggle');t=document.getElementById(id);if(t){t.hidden=!t.hidden;e.preventDefault();}}
+    sync();
+  });
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',sync);else sync();
+})();
+</script>
+</body>
+</html>

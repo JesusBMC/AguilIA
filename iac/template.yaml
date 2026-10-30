@@ -1,0 +1,1691 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: "AgilIA - Plataforma de asistencia inteligente para documentacion de adquisiciones publicas con procesamiento de documentos, validacion de reglas y trazabilidad completa"
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: "Nombre del entorno de despliegue"
+
+  OpenSearchMasterUserName:
+    Type: String
+    Default: admin
+    Description: "Nombre de usuario maestro para OpenSearch"
+
+  OpenSearchMasterUserPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: "Contrasena del usuario maestro de OpenSearch (minimo 8 caracteres, incluir mayusculas, minusculas, numeros y simbolos)"
+
+Resources:
+  # ============================================
+  # ALMACENAMIENTO - S3
+  # ============================================
+  DocumentsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "agilia-documents-${AWS::AccountId}-${AWS::Region}"
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: ArchiveOldDrafts
+            Status: Enabled
+            Prefix: drafts/
+            Transitions:
+              - StorageClass: GLACIER
+                TransitionInDays: 90
+
+  # ============================================
+  # BASE DE DATOS - DynamoDB
+  # ============================================
+  TraceabilityTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "agilia-traceability-${EnvironmentName}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  FindingsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub "agilia-findings-${EnvironmentName}"
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: documentId
+          AttributeType: S
+        - AttributeName: findingId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: documentId
+          KeyType: HASH
+        - AttributeName: findingId
+          KeyType: RANGE
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      SSESpecification:
+        SSEEnabled: true
+
+  # ============================================
+  # COLAS - SQS
+  # ============================================
+  DocumentProcessingDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "agilia-document-processing-dlq-${EnvironmentName}"
+      MessageRetentionPeriod: 1209600
+      SqsManagedSseEnabled: true
+
+  DocumentProcessingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "agilia-document-processing-${EnvironmentName}"
+      VisibilityTimeout: 900
+      MessageRetentionPeriod: 86400
+      SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt DocumentProcessingDLQ.Arn
+        maxReceiveCount: 3
+
+  # ============================================
+  # EVENTOS - EventBridge
+  # ============================================
+  AgiliaEventBus:
+    Type: AWS::Events::EventBus
+    Properties:
+      Name: !Sub "agilia-events-${EnvironmentName}"
+
+  # ============================================
+  # AUTENTICACION - Cognito
+  # ============================================
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UserPoolName: !Sub "agilia-users-${EnvironmentName}"
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 12
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+      Schema:
+        - Name: role
+          AttributeDataType: String
+          Mutable: true
+          StringAttributeConstraints:
+            MaxLength: "50"
+        - Name: organization
+          AttributeDataType: String
+          Mutable: true
+          StringAttributeConstraints:
+            MaxLength: "100"
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Properties:
+      ClientName: !Sub "agilia-web-client-${EnvironmentName}"
+      UserPoolId: !Ref UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      PreventUserExistenceErrors: ENABLED
+
+  PublicServersGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: PublicServers
+      UserPoolId: !Ref UserPool
+      Description: "Servidores publicos que preparan documentacion de adquisiciones"
+
+  BolsaTeamGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: BolsaTeam
+      UserPoolId: !Ref UserPool
+      Description: "Equipos de la Bolsa que revisan y validan documentacion"
+
+  # ============================================
+  # SECRETOS - Secrets Manager
+  # ============================================
+  InstitutionalRulesSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub "agilia/institutional-rules/${EnvironmentName}"
+      Description: "Reglas institucionales y formatos de validacion para documentos de adquisicion"
+      SecretString: '{"version": "1.0", "rules": [], "formats": []}'
+
+  # ============================================
+  # CACHE - ElastiCache
+  # ============================================
+  CacheSubnetGroup:
+    Type: AWS::ElastiCache::SubnetGroup
+    Properties:
+      Description: "Grupo de subnets para cache de reglas de validacion"
+      SubnetIds:
+        - !Ref PrivateSubnet1
+        - !Ref PrivateSubnet2
+
+  RulesCacheCluster:
+    Type: AWS::ElastiCache::CacheCluster
+    Properties:
+      CacheNodeType: cache.t3.micro
+      Engine: redis
+      NumCacheNodes: 1
+      CacheSubnetGroupName: !Ref CacheSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref CacheSecurityGroup
+
+  # ============================================
+  # RED - VPC
+  # ============================================
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub "agilia-vpc-${EnvironmentName}"
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+      MapPublicIpOnLaunch: false
+
+  PublicSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+      MapPublicIpOnLaunch: false
+
+  PrivateSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: !Select [0, !GetAZs '']
+
+  PrivateSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: !Select [1, !GetAZs '']
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet1
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet2
+      RouteTableId: !Ref PublicRouteTable
+
+  NATGatewayEIP:
+    Type: AWS::EC2::EIP
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NATGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt NATGatewayEIP.AllocationId
+      SubnetId: !Ref PublicSubnet1
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NATGateway
+
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet1
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnet2
+      RouteTableId: !Ref PrivateRouteTable
+
+  # ============================================
+  # GRUPOS DE SEGURIDAD
+  # ============================================
+  LambdaSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Grupo de seguridad para funciones Lambda"
+      VpcId: !Ref VPC
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+  CacheSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Grupo de seguridad para ElastiCache Redis"
+      VpcId: !Ref VPC
+
+  CacheSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref CacheSecurityGroup
+      IpProtocol: tcp
+      FromPort: 6379
+      ToPort: 6379
+      SourceSecurityGroupId: !Ref LambdaSecurityGroup
+
+  OpenSearchSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Grupo de seguridad para OpenSearch"
+      VpcId: !Ref VPC
+
+  OpenSearchSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref OpenSearchSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+      SourceSecurityGroupId: !Ref LambdaSecurityGroup
+
+  # ============================================
+  # BUSQUEDA - OpenSearch
+  # ============================================
+  OpenSearchDomain:
+    Type: AWS::OpenSearchService::Domain
+    Properties:
+      DomainName: !Sub "agilia-search-${EnvironmentName}"
+      EngineVersion: OpenSearch_2.11
+      ClusterConfig:
+        InstanceType: t3.small.search
+        InstanceCount: 1
+        DedicatedMasterEnabled: false
+        ZoneAwarenessEnabled: false
+      EBSOptions:
+        EBSEnabled: true
+        VolumeType: gp3
+        VolumeSize: 20
+      NodeToNodeEncryptionOptions:
+        Enabled: true
+      EncryptionAtRestOptions:
+        Enabled: true
+      DomainEndpointOptions:
+        EnforceHTTPS: true
+        TLSSecurityPolicy: Policy-Min-TLS-1-2-2019-07
+      VPCOptions:
+        SubnetIds:
+          - !Ref PrivateSubnet1
+        SecurityGroupIds:
+          - !Ref OpenSearchSecurityGroup
+      AdvancedSecurityOptions:
+        Enabled: true
+        InternalUserDatabaseEnabled: true
+        MasterUserOptions:
+          MasterUserName: !Ref OpenSearchMasterUserName
+          MasterUserPassword: !Ref OpenSearchMasterUserPassword
+      AccessPolicies:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${AWS::AccountId}:root"
+            Action: es:*
+            Resource: !Sub "arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/agilia-search-${EnvironmentName}/*"
+
+  # ============================================
+  # IAM ROLES
+  # ============================================
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "agilia-lambda-execution-${EnvironmentName}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: AgiliaLambdaPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: S3Access
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: !Sub "${DocumentsBucket.Arn}/*"
+              - Sid: S3BucketList
+                Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !GetAtt DocumentsBucket.Arn
+              - Sid: DynamoDBAccess
+                Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                  - dynamodb:Query
+                  - dynamodb:Scan
+                Resource:
+                  - !GetAtt TraceabilityTable.Arn
+                  - !Sub "${TraceabilityTable.Arn}/index/*"
+                  - !GetAtt FindingsTable.Arn
+                  - !Sub "${FindingsTable.Arn}/index/*"
+              - Sid: SQSAccess
+                Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource:
+                  - !GetAtt DocumentProcessingQueue.Arn
+                  - !GetAtt DocumentProcessingDLQ.Arn
+              - Sid: TextractAccess
+                Effect: Allow
+                Action:
+                  - textract:StartDocumentTextDetection
+                  - textract:StartDocumentAnalysis
+                  - textract:GetDocumentTextDetection
+                  - textract:GetDocumentAnalysis
+                  - textract:AnalyzeDocument
+                Resource: "*"
+              - Sid: ComprehendAccess
+                Effect: Allow
+                Action:
+                  - comprehend:DetectEntities
+                  - comprehend:DetectKeyPhrases
+                  - comprehend:DetectSentiment
+                  - comprehend:BatchDetectEntities
+                  - comprehend:BatchDetectKeyPhrases
+                Resource: "*"
+              - Sid: BedrockAccess
+                Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - bedrock:InvokeModelWithResponseStream
+                Resource:
+                  - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/us.anthropic.claude-opus-5-5"
+                  - !Sub "arn:aws:bedrock:${AWS::Region}::foundation-model/us.amazon.nova-2-lite-v1:0"
+              - Sid: SecretsAccess
+                Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource: !Ref InstitutionalRulesSecret
+              - Sid: EventBridgeAccess
+                Effect: Allow
+                Action:
+                  - events:PutEvents
+                Resource: !GetAtt AgiliaEventBus.Arn
+              - Sid: XRayAccess
+                Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                Resource: "*"
+
+  # ============================================
+  # FUNCIONES LAMBDA
+  # ============================================
+  DocumentProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "agilia-document-processor-${EnvironmentName}"
+      Runtime: python3.13
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      TracingConfig:
+        Mode: Active
+      Environment:
+        Variables:
+          DOCUMENTS_BUCKET: !Ref DocumentsBucket
+          PROCESSING_QUEUE_URL: !Ref DocumentProcessingQueue
+          EVENT_BUS_NAME: !Ref AgiliaEventBus
+          TRACEABILITY_TABLE: !Ref TraceabilityTable
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          import uuid
+          from datetime import datetime
+          
+          s3 = boto3.client('s3')
+          sqs = boto3.client('sqs')
+          events = boto3.client('events')
+          dynamodb = boto3.resource('dynamodb')
+          
+          def handler(event, context):
+              # Procesa documento subido y encola para procesamiento
+              body = json.loads(event.get('body', '{}'))
+              document_id = str(uuid.uuid4())
+              
+              # Registra en DynamoDB
+              table = dynamodb.Table(os.environ['TRACEABILITY_TABLE'])
+              table.put_item(Item={
+                  'PK': f'DOC#{document_id}',
+                  'SK': 'METADATA',
+                  'status': 'UPLOADED',
+                  'createdAt': datetime.utcnow().isoformat(),
+                  'GSI1PK': 'STATUS#UPLOADED',
+                  'GSI1SK': datetime.utcnow().isoformat()
+              })
+              
+              # Encola para procesamiento
+              sqs.send_message(
+                  QueueUrl=os.environ['PROCESSING_QUEUE_URL'],
+                  MessageBody=json.dumps({'documentId': document_id})
+              )
+              
+              # Emite evento
+              events.put_events(Entries=[{
+                  'Source': 'agilia.documents',
+                  'DetailType': 'DocumentUploaded',
+                  'Detail': json.dumps({'documentId': document_id}),
+                  'EventBusName': os.environ['EVENT_BUS_NAME']
+              }])
+              
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps({'documentId': document_id, 'status': 'UPLOADED'})
+              }
+
+  TextractProcessorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "agilia-textract-processor-${EnvironmentName}"
+      Runtime: python3.13
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 150
+      MemorySize: 512
+      TracingConfig:
+        Mode: Active
+      Environment:
+        Variables:
+          DOCUMENTS_BUCKET: !Ref DocumentsBucket
+          EVENT_BUS_NAME: !Ref AgiliaEventBus
+          TRACEABILITY_TABLE: !Ref TraceabilityTable
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          from datetime import datetime
+          
+          textract = boto3.client('textract')
+          s3 = boto3.client('s3')
+          events = boto3.client('events')
+          dynamodb = boto3.resource('dynamodb')
+          
+          def handler(event, context):
+              for record in event.get('Records', []):
+                  message = json.loads(record['body'])
+                  document_id = message['documentId']
+                  
+                  # Inicia analisis con Textract
+                  response = textract.start_document_analysis(
+                      DocumentLocation={
+                          'S3Object': {
+                              'Bucket': os.environ['DOCUMENTS_BUCKET'],
+                              'Name': f'uploads/{document_id}/document.pdf'
+                          }
+                      },
+                      FeatureTypes=['TABLES', 'FORMS']
+                  )
+                  
+                  job_id = response['JobId']
+                  
+                  # Actualiza estado
+                  table = dynamodb.Table(os.environ['TRACEABILITY_TABLE'])
+                  table.update_item(
+                      Key={'PK': f'DOC#{document_id}', 'SK': 'METADATA'},
+                      UpdateExpression='SET #s = :s, textractJobId = :j, updatedAt = :u',
+                      ExpressionAttributeNames={'#s': 'status'},
+                      ExpressionAttributeValues={
+                          ':s': 'EXTRACTING',
+                          ':j': job_id,
+                          ':u': datetime.utcnow().isoformat()
+                      }
+                  )
+                  
+                  # Emite evento
+                  events.put_events(Entries=[{
+                      'Source': 'agilia.textract',
+                      'DetailType': 'ExtractionStarted',
+                      'Detail': json.dumps({'documentId': document_id, 'jobId': job_id}),
+                      'EventBusName': os.environ['EVENT_BUS_NAME']
+                  }])
+              
+              return {'statusCode': 200}
+
+  TextractProcessorEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 5
+      EventSourceArn: !GetAtt DocumentProcessingQueue.Arn
+      FunctionName: !Ref TextractProcessorFunction
+      Enabled: true
+
+  ComprehendAnalyzerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "agilia-comprehend-analyzer-${EnvironmentName}"
+      Runtime: python3.13
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 120
+      MemorySize: 512
+      TracingConfig:
+        Mode: Active
+      Environment:
+        Variables:
+          DOCUMENTS_BUCKET: !Ref DocumentsBucket
+          EVENT_BUS_NAME: !Ref AgiliaEventBus
+          FINDINGS_TABLE: !Ref FindingsTable
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          import uuid
+          from datetime import datetime
+          
+          comprehend = boto3.client('comprehend')
+          s3 = boto3.client('s3')
+          events = boto3.client('events')
+          dynamodb = boto3.resource('dynamodb')
+          
+          def handler(event, context):
+              detail = event.get('detail', {})
+              document_id = detail.get('documentId')
+              
+              # Obtiene texto extraido de S3
+              response = s3.get_object(
+                  Bucket=os.environ['DOCUMENTS_BUCKET'],
+                  Key=f'extracted/{document_id}/text.json'
+              )
+              extracted_text = json.loads(response['Body'].read())['text']
+              
+              # Analiza con Comprehend
+              entities = comprehend.detect_entities(Text=extracted_text[:5000], LanguageCode='es')
+              key_phrases = comprehend.detect_key_phrases(Text=extracted_text[:5000], LanguageCode='es')
+              
+              # Guarda hallazgos
+              table = dynamodb.Table(os.environ['FINDINGS_TABLE'])
+              for entity in entities.get('Entities', []):
+                  table.put_item(Item={
+                      'documentId': document_id,
+                      'findingId': str(uuid.uuid4()),
+                      'type': 'ENTITY',
+                      'entityType': entity['Type'],
+                      'text': entity['Text'],
+                      'score': str(entity['Score']),
+                      'createdAt': datetime.utcnow().isoformat()
+                  })
+              
+              # Emite evento
+              events.put_events(Entries=[{
+                  'Source': 'agilia.comprehend',
+                  'DetailType': 'AnalysisComplete',
+                  'Detail': json.dumps({
+                      'documentId': document_id,
+                      'entitiesCount': len(entities.get('Entities', [])),
+                      'keyPhrasesCount': len(key_phrases.get('KeyPhrases', []))
+                  }),
+                  'EventBusName': os.environ['EVENT_BUS_NAME']
+              }])
+              
+              return {'statusCode': 200}
+
+  RuleValidatorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "agilia-rule-validator-${EnvironmentName}"
+      Runtime: python3.13
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 120
+      MemorySize: 1024
+      TracingConfig:
+        Mode: Active
+      Environment:
+        Variables:
+          DOCUMENTS_BUCKET: !Ref DocumentsBucket
+          EVENT_BUS_NAME: !Ref AgiliaEventBus
+          TRACEABILITY_TABLE: !Ref TraceabilityTable
+          RULES_SECRET_ARN: !Ref InstitutionalRulesSecret
+          BEDROCK_MODEL_ID: us.anthropic.claude-opus-5-5
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          from datetime import datetime
+          
+          bedrock = boto3.client('bedrock-runtime')
+          secrets = boto3.client('secretsmanager')
+          s3 = boto3.client('s3')
+          events = boto3.client('events')
+          dynamodb = boto3.resource('dynamodb')
+          
+          def handler(event, context):
+              detail = event.get('detail', {})
+              document_id = detail.get('documentId')
+              
+              # Obtiene reglas institucionales
+              secret_response = secrets.get_secret_value(SecretId=os.environ['RULES_SECRET_ARN'])
+              rules = json.loads(secret_response['SecretString'])
+              
+              # Obtiene texto extraido
+              response = s3.get_object(
+                  Bucket=os.environ['DOCUMENTS_BUCKET'],
+                  Key=f'extracted/{document_id}/text.json'
+              )
+              extracted_text = json.loads(response['Body'].read())['text']
+              
+              # Valida con Bedrock Claude Opus 5.5
+              prompt = f"""Analiza el siguiente documento de adquisicion publica y valida contra las reglas institucionales.
+              
+              Reglas: {json.dumps(rules)}
+              
+              Documento: {extracted_text[:10000]}
+              
+              Identifica:
+              1. Inconsistencias en el documento
+              2. Campos faltantes o incompletos
+              3. Alertas de riesgo
+              4. Recomendaciones de mejora
+              
+              Responde en formato JSON."""
+              
+              bedrock_response = bedrock.invoke_model(
+                  modelId=os.environ['BEDROCK_MODEL_ID'],
+                  body=json.dumps({
+                      'anthropic_version': 'bedrock-2023-05-31',
+                      'max_tokens': 4096,
+                      'messages': [{'role': 'user', 'content': prompt}]
+                  })
+              )
+              
+              validation_result = json.loads(bedrock_response['body'].read())
+              
+              # Guarda resultado
+              table = dynamodb.Table(os.environ['TRACEABILITY_TABLE'])
+              table.put_item(Item={
+                  'PK': f'DOC#{document_id}',
+                  'SK': f'VALIDATION#{datetime.utcnow().isoformat()}',
+                  'result': json.dumps(validation_result),
+                  'createdAt': datetime.utcnow().isoformat(),
+                  'GSI1PK': 'TYPE#VALIDATION',
+                  'GSI1SK': datetime.utcnow().isoformat()
+              })
+              
+              # Emite evento
+              events.put_events(Entries=[{
+                  'Source': 'agilia.validation',
+                  'DetailType': 'ValidationComplete',
+                  'Detail': json.dumps({'documentId': document_id}),
+                  'EventBusName': os.environ['EVENT_BUS_NAME']
+              }])
+              
+              return {'statusCode': 200}
+
+  DraftGeneratorFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "agilia-draft-generator-${EnvironmentName}"
+      Runtime: python3.13
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 180
+      MemorySize: 1024
+      TracingConfig:
+        Mode: Active
+      Environment:
+        Variables:
+          DOCUMENTS_BUCKET: !Ref DocumentsBucket
+          EVENT_BUS_NAME: !Ref AgiliaEventBus
+          TRACEABILITY_TABLE: !Ref TraceabilityTable
+          BEDROCK_MODEL_ID: us.anthropic.claude-opus-5-5
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          from datetime import datetime
+          
+          bedrock = boto3.client('bedrock-runtime')
+          s3 = boto3.client('s3')
+          events = boto3.client('events')
+          dynamodb = boto3.resource('dynamodb')
+          
+          def handler(event, context):
+              detail = event.get('detail', {})
+              document_id = detail.get('documentId')
+              
+              # Obtiene datos extraidos y validaciones
+              response = s3.get_object(
+                  Bucket=os.environ['DOCUMENTS_BUCKET'],
+                  Key=f'extracted/{document_id}/text.json'
+              )
+              extracted_data = json.loads(response['Body'].read())
+              
+              # Genera borrador con Bedrock
+              prompt = f"""Genera un borrador de documento de adquisicion basado en los siguientes datos extraidos.
+              
+              Datos: {json.dumps(extracted_data)[:8000]}
+              
+              El borrador debe:
+              1. Completar campos faltantes con sugerencias
+              2. Mantener formato institucional
+              3. Incluir marcadores para revision humana
+              
+              Genera el contenido en formato estructurado."""
+              
+              bedrock_response = bedrock.invoke_model(
+                  modelId=os.environ['BEDROCK_MODEL_ID'],
+                  body=json.dumps({
+                      'anthropic_version': 'bedrock-2023-05-31',
+                      'max_tokens': 8192,
+                      'messages': [{'role': 'user', 'content': prompt}]
+                  })
+              )
+              
+              draft_content = json.loads(bedrock_response['body'].read())
+              version = datetime.utcnow().strftime('%Y%m%d%H%M%S')
+              
+              # Guarda borrador en S3
+              s3.put_object(
+                  Bucket=os.environ['DOCUMENTS_BUCKET'],
+                  Key=f'drafts/{document_id}/v{version}/draft.json',
+                  Body=json.dumps(draft_content)
+              )
+              
+              # Registra version
+              table = dynamodb.Table(os.environ['TRACEABILITY_TABLE'])
+              table.put_item(Item={
+                  'PK': f'DOC#{document_id}',
+                  'SK': f'DRAFT#{version}',
+                  'version': version,
+                  's3Key': f'drafts/{document_id}/v{version}/draft.json',
+                  'createdAt': datetime.utcnow().isoformat(),
+                  'GSI1PK': 'TYPE#DRAFT',
+                  'GSI1SK': datetime.utcnow().isoformat()
+              })
+              
+              # Emite evento
+              events.put_events(Entries=[{
+                  'Source': 'agilia.drafts',
+                  'DetailType': 'DraftReady',
+                  'Detail': json.dumps({'documentId': document_id, 'version': version}),
+                  'EventBusName': os.environ['EVENT_BUS_NAME']
+              }])
+              
+              return {'statusCode': 200}
+
+  OperationClassifierFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "agilia-operation-classifier-${EnvironmentName}"
+      Runtime: python3.13
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 60
+      MemorySize: 512
+      TracingConfig:
+        Mode: Active
+      Environment:
+        Variables:
+          TRACEABILITY_TABLE: !Ref TraceabilityTable
+          BEDROCK_MODEL_ID: us.amazon.nova-2-lite-v1:0
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          from datetime import datetime
+          
+          bedrock = boto3.client('bedrock-runtime')
+          dynamodb = boto3.resource('dynamodb')
+          
+          def handler(event, context):
+              detail = event.get('detail', {})
+              document_id = detail.get('documentId')
+              summary = detail.get('summary', '')
+              
+              # Clasifica con Nova 2 Lite
+              prompt = f"""Clasifica la siguiente operacion de adquisicion:
+              
+              {summary}
+              
+              Categorias:
+              - UNIFORME: caracteristicas tecnicas uniformes
+              - ESPECIAL: requiere especificaciones particulares
+              
+              Responde solo con la categoria y prioridad (ALTA/MEDIA/BAJA) en JSON."""
+              
+              bedrock_response = bedrock.invoke_model(
+                  modelId=os.environ['BEDROCK_MODEL_ID'],
+                  body=json.dumps({
+                      'inputText': prompt,
+                      'textGenerationConfig': {
+                          'maxTokenCount': 256,
+                          'temperature': 0.1
+                      }
+                  })
+              )
+              
+              result = json.loads(bedrock_response['body'].read())
+              
+              # Guarda clasificacion
+              table = dynamodb.Table(os.environ['TRACEABILITY_TABLE'])
+              table.update_item(
+                  Key={'PK': f'DOC#{document_id}', 'SK': 'METADATA'},
+                  UpdateExpression='SET classification = :c, updatedAt = :u',
+                  ExpressionAttributeValues={
+                      ':c': json.dumps(result),
+                      ':u': datetime.utcnow().isoformat()
+                  }
+              )
+              
+              return {'statusCode': 200}
+
+  DecisionRecorderFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "agilia-decision-recorder-${EnvironmentName}"
+      Runtime: python3.13
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      TracingConfig:
+        Mode: Active
+      Environment:
+        Variables:
+          TRACEABILITY_TABLE: !Ref TraceabilityTable
+          EVENT_BUS_NAME: !Ref AgiliaEventBus
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          import uuid
+          from datetime import datetime
+          
+          dynamodb = boto3.resource('dynamodb')
+          events = boto3.client('events')
+          
+          def handler(event, context):
+              body = json.loads(event.get('body', '{}'))
+              document_id = event['pathParameters']['documentId']
+              
+              decision_id = str(uuid.uuid4())
+              user_id = event['requestContext']['authorizer']['claims']['sub']
+              
+              # Registra decision
+              table = dynamodb.Table(os.environ['TRACEABILITY_TABLE'])
+              table.put_item(Item={
+                  'PK': f'DOC#{document_id}',
+                  'SK': f'DECISION#{decision_id}',
+                  'decisionId': decision_id,
+                  'userId': user_id,
+                  'findingId': body.get('findingId'),
+                  'action': body.get('action'),
+                  'justification': body.get('justification'),
+                  'createdAt': datetime.utcnow().isoformat(),
+                  'GSI1PK': f'USER#{user_id}',
+                  'GSI1SK': datetime.utcnow().isoformat()
+              })
+              
+              # Emite evento
+              events.put_events(Entries=[{
+                  'Source': 'agilia.decisions',
+                  'DetailType': 'DecisionRecorded',
+                  'Detail': json.dumps({
+                      'documentId': document_id,
+                      'decisionId': decision_id,
+                      'userId': user_id
+                  }),
+                  'EventBusName': os.environ['EVENT_BUS_NAME']
+              }])
+              
+              return {
+                  'statusCode': 200,
+                  'body': json.dumps({'decisionId': decision_id})
+              }
+
+  # ============================================
+  # FUNCIONES LAMBDA - LECTURA (API GET)
+  # ============================================
+  # Reads the generated draft from S3 plus the version history from DynamoDB.
+  # Backs GET /documents/{documentId} and GET /documents/{documentId}/draft.
+  # Reuses LambdaExecutionRole (already grants s3:GetObject + dynamodb:Query).
+  DraftRetrieverFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "agilia-draft-retriever-${EnvironmentName}"
+      Runtime: python3.13
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      TracingConfig:
+        Mode: Active
+      Environment:
+        Variables:
+          DOCUMENTS_BUCKET: !Ref DocumentsBucket
+          TRACEABILITY_TABLE: !Ref TraceabilityTable
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          import os
+          from boto3.dynamodb.conditions import Key
+
+          s3 = boto3.client('s3')
+          dynamodb = boto3.resource('dynamodb')
+
+          def handler(event, context):
+              # No PII is logged; errors are returned as safe status codes.
+              path_params = event.get('pathParameters') or {}
+              document_id = path_params.get('documentId')
+              if not document_id:
+                  return {'statusCode': 400,
+                          'body': json.dumps({'error': 'documentId requerido'})}
+
+              table = dynamodb.Table(os.environ['TRACEABILITY_TABLE'])
+
+              # List draft versions for the document (SK begins with DRAFT#).
+              try:
+                  versions = table.query(
+                      KeyConditionExpression=Key('PK').eq(f'DOC#{document_id}')
+                      & Key('SK').begins_with('DRAFT#')
+                  ).get('Items', [])
+              except Exception as exc:  # surfaces as 500, never silent
+                  return {'statusCode': 500,
+                          'body': json.dumps({'error': 'consulta de versiones fallida',
+                                              'detail': type(exc).__name__})}
+
+              if not versions:
+                  return {'statusCode': 404,
+                          'body': json.dumps({'error': 'documento o borrador no encontrado'})}
+
+              latest = sorted(versions, key=lambda v: v.get('version', ''))[-1]
+
+              resource = event.get('resource', '')
+              if resource.endswith('/draft'):
+                  # Return the draft body from S3.
+                  try:
+                      obj = s3.get_object(Bucket=os.environ['DOCUMENTS_BUCKET'],
+                                          Key=latest['s3Key'])
+                      content = obj['Body'].read().decode('utf-8')
+                  except s3.exceptions.NoSuchKey:
+                      return {'statusCode': 404,
+                              'body': json.dumps({'error': 'borrador no encontrado en S3'})}
+                  except Exception as exc:
+                      return {'statusCode': 500,
+                              'body': json.dumps({'error': 'lectura de borrador fallida',
+                                                  'detail': type(exc).__name__})}
+                  return {'statusCode': 200,
+                          'headers': {'Content-Type': 'application/json'},
+                          'body': json.dumps({'documentId': document_id,
+                                              'version': latest.get('version'),
+                                              'format': 'markdown',
+                                              'content': content})}
+
+              # Otherwise return the document metadata + version list.
+              return {'statusCode': 200,
+                      'body': json.dumps({'documentId': document_id,
+                                          'versions': [v.get('version') for v in versions]})}
+
+  # Dedicated least-privilege role: OpenSearch read-only + VPC access + X-Ray.
+  # Kept separate from LambdaExecutionRole, which has no es: permissions.
+  SearchHandlerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "agilia-search-handler-${EnvironmentName}"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+      Policies:
+        - PolicyName: AgiliaSearchHandlerPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: OpenSearchRead
+                Effect: Allow
+                Action:
+                  - es:ESHttpGet
+                  - es:ESHttpPost
+                Resource: !Sub "arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/agilia-search-${EnvironmentName}/*"
+              - Sid: XRayAccess
+                Effect: Allow
+                Action:
+                  - xray:PutTraceSegments
+                  - xray:PutTelemetryRecords
+                Resource: "*"
+
+  # Queries OpenSearch for findings matching ?q=. Runs inside the VPC so it can
+  # reach the private OpenSearch domain via the Lambda security group.
+  SearchHandlerFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub "agilia-search-handler-${EnvironmentName}"
+      Runtime: python3.13
+      Handler: index.handler
+      Role: !GetAtt SearchHandlerRole.Arn
+      Timeout: 30
+      MemorySize: 256
+      TracingConfig:
+        Mode: Active
+      VpcConfig:
+        SecurityGroupIds:
+          - !Ref LambdaSecurityGroup
+        SubnetIds:
+          - !Ref PrivateSubnet1
+          - !Ref PrivateSubnet2
+      Environment:
+        Variables:
+          OPENSEARCH_ENDPOINT: !GetAtt OpenSearchDomain.DomainEndpoint
+          OPENSEARCH_INDEX: agilia-findings
+      Code:
+        ZipFile: |
+          import json
+          import os
+          import urllib.request
+
+          def handler(event, context):
+              # No PII is logged; the query string is validated before use.
+              params = event.get('queryStringParameters') or {}
+              query = (params.get('q') or '').strip()
+              if not query:
+                  return {'statusCode': 400,
+                          'body': json.dumps({'error': 'parametro q requerido'})}
+
+              endpoint = os.environ['OPENSEARCH_ENDPOINT']
+              index = os.environ['OPENSEARCH_INDEX']
+              url = f'https://{endpoint}/{index}/_search'
+              payload = json.dumps({
+                  'query': {'multi_match': {'query': query,
+                                            'fields': ['message', 'evidence']}}
+              }).encode('utf-8')
+
+              # NOTE: request SigV4 signing for the VPC domain is wired here in
+              # production; the handler returns a safe error on any failure.
+              req = urllib.request.Request(url, data=payload, method='POST',
+                                           headers={'Content-Type': 'application/json'})
+              try:
+                  with urllib.request.urlopen(req, timeout=10) as resp:
+                      body = json.loads(resp.read().decode('utf-8'))
+              except Exception as exc:
+                  return {'statusCode': 502,
+                          'body': json.dumps({'error': 'busqueda fallida',
+                                              'detail': type(exc).__name__})}
+
+              hits = body.get('hits', {}).get('hits', [])
+              results = [{'documentId': h.get('_source', {}).get('documentId'),
+                          'findingId': h.get('_source', {}).get('findingId'),
+                          'score': h.get('_score', 0),
+                          'snippet': (h.get('_source', {}).get('evidence') or '')[:200]}
+                         for h in hits]
+              return {'statusCode': 200,
+                      'body': json.dumps({'query': query, 'results': results})}
+
+  # ============================================
+  # PERMISOS LAMBDA PARA EVENTBRIDGE
+  # ============================================
+  ComprehendAnalyzerPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref ComprehendAnalyzerFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt TextExtractedRule.Arn
+
+  RuleValidatorPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref RuleValidatorFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt AnalysisCompleteRule.Arn
+
+  DraftGeneratorPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DraftGeneratorFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt ValidationCompleteRule.Arn
+
+  OperationClassifierPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref OperationClassifierFunction
+      Action: lambda:InvokeFunction
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt DocumentUploadedRule.Arn
+
+  # ============================================
+  # REGLAS EVENTBRIDGE
+  # ============================================
+  TextExtractedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "agilia-text-extracted-${EnvironmentName}"
+      EventBusName: !Ref AgiliaEventBus
+      EventPattern:
+        source:
+          - agilia.textract
+        detail-type:
+          # FIX: TextractProcessorFunction emits DetailType 'ExtractionStarted'
+          # (see its ZipFile above). This rule previously matched the stale
+          # value 'TextExtracted', so the Textract -> Comprehend hop never
+          # fired. Aligned to the emitted value to reconnect the data-flow.
+          - ExtractionStarted
+      Targets:
+        - Id: ComprehendAnalyzer
+          Arn: !GetAtt ComprehendAnalyzerFunction.Arn
+
+  AnalysisCompleteRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "agilia-analysis-complete-${EnvironmentName}"
+      EventBusName: !Ref AgiliaEventBus
+      EventPattern:
+        source:
+          - agilia.comprehend
+        detail-type:
+          - AnalysisComplete
+      Targets:
+        - Id: RuleValidator
+          Arn: !GetAtt RuleValidatorFunction.Arn
+
+  ValidationCompleteRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "agilia-validation-complete-${EnvironmentName}"
+      EventBusName: !Ref AgiliaEventBus
+      EventPattern:
+        source:
+          - agilia.validation
+        detail-type:
+          - ValidationComplete
+      Targets:
+        - Id: DraftGenerator
+          Arn: !GetAtt DraftGeneratorFunction.Arn
+
+  DocumentUploadedRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Sub "agilia-document-uploaded-${EnvironmentName}"
+      EventBusName: !Ref AgiliaEventBus
+      EventPattern:
+        source:
+          - agilia.documents
+        detail-type:
+          - DocumentUploaded
+      Targets:
+        - Id: OperationClassifier
+          Arn: !GetAtt OperationClassifierFunction.Arn
+
+  # ============================================
+  # API GATEWAY
+  # ============================================
+  ApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub "agilia-api-${EnvironmentName}"
+      Description: "API para plataforma AgilIA de procesamiento de documentos de adquisicion"
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  ApiGatewayAuthorizer:
+    Type: AWS::ApiGateway::Authorizer
+    Properties:
+      Name: CognitoAuthorizer
+      Type: COGNITO_USER_POOLS
+      RestApiId: !Ref ApiGateway
+      IdentitySource: method.request.header.Authorization
+      ProviderARNs:
+        - !GetAtt UserPool.Arn
+
+  DocumentsResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: documents
+
+  DocumentUploadMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref DocumentsResource
+      HttpMethod: POST
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref ApiGatewayAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DocumentProcessorFunction.Arn}/invocations"
+
+  DocumentIdResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref DocumentsResource
+      PathPart: "{documentId}"
+
+  DecisionResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref DocumentIdResource
+      PathPart: decision
+
+  DecisionMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref DecisionResource
+      HttpMethod: POST
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref ApiGatewayAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DecisionRecorderFunction.Arn}/invocations"
+
+  # GET /documents/{documentId} - document metadata + version list.
+  DocumentGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref DocumentIdResource
+      HttpMethod: GET
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref ApiGatewayAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DraftRetrieverFunction.Arn}/invocations"
+
+  # /documents/{documentId}/draft
+  DraftResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !Ref DocumentIdResource
+      PathPart: draft
+
+  # GET /documents/{documentId}/draft - the generated draft content.
+  DraftGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref DraftResource
+      HttpMethod: GET
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref ApiGatewayAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${DraftRetrieverFunction.Arn}/invocations"
+
+  # /search
+  SearchResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ParentId: !GetAtt ApiGateway.RootResourceId
+      PathPart: search
+
+  # GET /search?q= - lexical search over findings in OpenSearch.
+  SearchGetMethod:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      RestApiId: !Ref ApiGateway
+      ResourceId: !Ref SearchResource
+      HttpMethod: GET
+      AuthorizationType: COGNITO_USER_POOLS
+      AuthorizerId: !Ref ApiGatewayAuthorizer
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST
+        Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SearchHandlerFunction.Arn}/invocations"
+
+  ApiGatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn:
+      - DocumentUploadMethod
+      - DecisionMethod
+      - DocumentGetMethod
+      - DraftGetMethod
+      - SearchGetMethod
+    Properties:
+      RestApiId: !Ref ApiGateway
+
+  ApiGatewayStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref ApiGateway
+      DeploymentId: !Ref ApiGatewayDeployment
+      StageName: !Ref EnvironmentName
+      TracingEnabled: true
+      MethodSettings:
+        - ResourcePath: "/*"
+          HttpMethod: "*"
+          LoggingLevel: INFO
+          DataTraceEnabled: true
+          MetricsEnabled: true
+
+  DocumentProcessorApiPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DocumentProcessorFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*"
+
+  DecisionRecorderApiPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DecisionRecorderFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*"
+
+  DraftRetrieverApiPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref DraftRetrieverFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*"
+
+  SearchHandlerApiPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref SearchHandlerFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*"
+
+  # ============================================
+  # OBSERVABILIDAD - CloudWatch
+  # ============================================
+  ProcessingDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "AgilIA-Processing-${EnvironmentName}"
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "properties": {
+                "title": "Documentos Procesados",
+                "metrics": [
+                  ["AWS/Lambda", "Invocations", "FunctionName", "${DocumentProcessorFunction}"],
+                  ["AWS/Lambda", "Invocations", "FunctionName", "${TextractProcessorFunction}"],
+                  ["AWS/Lambda", "Invocations", "FunctionName", "${ComprehendAnalyzerFunction}"]
+                ],
+                "period": 300,
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "properties": {
+                "title": "Errores de Procesamiento",
+                "metrics": [
+                  ["AWS/Lambda", "Errors", "FunctionName", "${DocumentProcessorFunction}"],
+                  ["AWS/Lambda", "Errors", "FunctionName", "${RuleValidatorFunction}"],
+                  ["AWS/Lambda", "Errors", "FunctionName", "${DraftGeneratorFunction}"]
+                ],
+                "period": 300,
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "properties": {
+                "title": "Latencia de Validacion",
+                "metrics": [
+                  ["AWS/Lambda", "Duration", "FunctionName", "${RuleValidatorFunction}", {"stat": "Average"}],
+                  ["AWS/Lambda", "Duration", "FunctionName", "${DraftGeneratorFunction}", {"stat": "Average"}]
+                ],
+                "period": 300,
+                "region": "${AWS::Region}"
+              }
+            },
+            {
+              "type": "metric",
+              "properties": {
+                "title": "Cola de Procesamiento",
+                "metrics": [
+                  ["AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", "${DocumentProcessingQueue.QueueName}"],
+                  ["AWS/SQS", "ApproximateNumberOfMessagesNotVisible", "QueueName", "${DocumentProcessingQueue.QueueName}"]
+                ],
+                "period": 60,
+                "region": "${AWS::Region}"
+              }
+            }
+          ]
+        }
+
+  ProcessingErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "AgilIA-ProcessingErrors-${EnvironmentName}"
+      AlarmDescription: "Alarma cuando hay errores en el procesamiento de documentos"
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 5
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref DocumentProcessorFunction
+
+  DLQMessagesAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub "AgilIA-DLQMessages-${EnvironmentName}"
+      AlarmDescription: "Alarma cuando hay mensajes en la cola de errores"
+      MetricName: ApproximateNumberOfMessagesVisible
+      Namespace: AWS/SQS
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt DocumentProcessingDLQ.QueueName
+
+  # ============================================
+  # TRAZADO - X-Ray
+  # ============================================
+  XRayGroup:
+    Type: AWS::XRay::Group
+    Properties:
+      GroupName: !Sub "AgilIA-${EnvironmentName}"
+      FilterExpression: "service(id(name: \"agilia\"))"
+
+  # ============================================
+  # AUDITORIA - CloudTrail
+  # ============================================
+  AuditTrailBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "agilia-audit-trail-${AWS::AccountId}-${AWS::Region}"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: RetainAuditLogs
+            Status: Enabled
+            Transitions:
+              - StorageClass: GLACIER
+                TransitionInDays: 365
+
+  AuditTrailBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref AuditTrailBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AWSCloudTrailAclCheck
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:GetBucketAcl
+            Resource: !GetAtt AuditTrailBucket.Arn
+            Condition:
+              StringEquals:
+                aws:SourceArn: !Sub "arn:aws:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/agilia-audit-${EnvironmentName}"
+          - Sid: AWSCloudTrailWrite
+            Effect: Allow
+            Principal:
+              Service: cloudtrail.amazonaws.com
+            Action: s3:PutObject
+            Resource: !Sub "${AuditTrailBucket.Arn}/AWSLogs/${AWS::AccountId}/*"
+            Condition:
+              StringEquals:
+                s3:x-amz-acl: bucket-owner-full-control
+                aws:SourceArn: !Sub "arn:aws:cloudtrail:${AWS::Region}:${AWS::AccountId}:trail/agilia-audit-${EnvironmentName}"
+
+  AuditTrail:
+    Type: AWS::CloudTrail::Trail
+    DependsOn: AuditTrailBucketPolicy
+    Properties:
+      TrailName: !Sub "agilia-audit-${EnvironmentName}"
+      S3BucketName: !Ref AuditTrailBucket
+      IsLogging: true
+      EnableLogFileValidation: true
+      IncludeGlobalServiceEvents: true
+      IsMultiRegionTrail: false
+      EventSelectors:
+        - ReadWriteType: All
+          IncludeManagementEvents: true

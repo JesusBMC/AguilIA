@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- CSP relaxed vs the mock: connect-src now allows the local API origin + same origin so the SPA can call the Hono server. script-src adds 'self' for app.js. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.tailwindcss.com 'unsafe-inline' 'unsafe-eval'; style-src https://cdn.tailwindcss.com 'unsafe-inline'; img-src data:; font-src data:; media-src data:; connect-src 'self' http://localhost:8787 http://127.0.0.1:8787; form-action 'none'; base-uri 'none'">
+<title>AgilIA · Demo PGN</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>[hidden]{display:none!important}html,body{height:100%;margin:0}body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}pre{white-space:pre-wrap;word-break:break-word}</style>
+</head>
+<body>
+<div class="h-screen w-screen overflow-hidden bg-slate-100 text-slate-800 flex flex-col text-[13px]">
+
+  <!-- Visible MVP no-auth banner (required: Cognito is the production auth boundary) -->
+  <div id="auth-banner" class="shrink-0 bg-amber-500 text-white text-center text-[12px] font-semibold py-1.5 px-4">
+    🔓 MVP: sin autenticación — este servidor local no valida identidad. En producción, Amazon Cognito es la frontera de autenticación.
+  </div>
+
+  <!-- Global error strip (no silent failures) -->
+  <div id="app-error" hidden class="shrink-0 bg-red-600 text-white text-[12px] py-1.5 px-4 flex items-center justify-between">
+    <span id="app-error-msg"></span>
+    <button id="app-error-close" class="ml-3 underline">cerrar</button>
+  </div>
+
+  <div class="flex-1 min-h-0 flex">
+
+  <!-- Sidebar -->
+  <aside class="w-56 shrink-0 bg-slate-900 text-slate-300 flex flex-col">
+    <div class="px-4 py-4 flex items-center gap-2 border-b border-slate-800">
+      <div class="w-8 h-8 rounded-lg bg-emerald-500 text-white font-bold flex items-center justify-center">A</div>
+      <div>
+        <div class="text-white font-semibold leading-tight">AgilIA</div>
+        <div class="text-[10px] text-slate-400 leading-tight">Mercado de Compras Públicas</div>
+      </div>
+    </div>
+    <div class="px-4 pt-4 pb-1 text-[10px] uppercase tracking-wider text-slate-500">Proceso <span id="proc-id">AGL-2026-PGN41</span></div>
+    <nav class="px-2 space-y-1">
+      <button data-go="cargar" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 aria-[current=true]:bg-emerald-600 aria-[current=true]:text-white flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-slate-700 text-[10px] flex items-center justify-center">1</span>Cargar documentos</button>
+      <button data-go="datos" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 aria-[current=true]:bg-emerald-600 aria-[current=true]:text-white flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-slate-700 text-[10px] flex items-center justify-center">2</span>Datos y preguntas</button>
+      <button data-go="borradores" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 aria-[current=true]:bg-emerald-600 aria-[current=true]:text-white flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-slate-700 text-[10px] flex items-center justify-center">3</span>Borradores y alertas</button>
+      <button data-go="exportar" class="w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 aria-[current=true]:bg-emerald-600 aria-[current=true]:text-white flex items-center gap-2"><span class="w-5 h-5 rounded-full bg-slate-700 text-[10px] flex items-center justify-center">4</span>Validar y exportar</button>
+    </nav>
+    <div class="mt-auto p-3 m-3 rounded-lg bg-slate-800 text-[11px]">
+      <div class="text-slate-400">Sesión (sin autenticar)</div>
+      <div class="flex items-center gap-2 mt-1"><span class="w-7 h-7 rounded-full bg-indigo-500 text-white flex items-center justify-center font-semibold">JP</span><div><div class="text-white leading-tight">Juan S. Poveda</div><div class="text-slate-400 leading-tight">Oficina de Tecnología · PGN</div></div></div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="flex-1 min-w-0 flex flex-col">
+    <header class="h-12 shrink-0 bg-white border-b border-slate-200 px-6 flex items-center justify-between">
+      <div class="flex items-center gap-2 text-slate-500 min-w-0"><span class="shrink-0">Procuraduría General de la Nación</span><span>›</span><span class="font-medium text-slate-800 truncate">Adquisición, implementación y soporte tecnológico (cómputo, audiovisuales y periféricos)</span></div>
+      <div class="flex items-center gap-2 text-[11px] shrink-0"><span class="px-2 py-1 rounded-full bg-amber-100 text-amber-700">Borrador local</span><span class="px-2 py-1 rounded-full bg-slate-100 text-slate-600">🔓 Sin autenticación</span></div>
+    </header>
+
+    <div data-screens class="flex-1 min-h-0">
+
+      <!-- Screen 1 -->
+      <section id="cargar" data-screen class="h-full p-5 overflow-y-auto">
+        <h1 class="text-xl font-bold">Prepare su adquisición sin empezar desde cero</h1>
+        <p class="text-slate-500 mb-4">Suba el estudio previo y sus anexos. AgilIA extrae los datos y arma los documentos del proceso: FTN, FTP y Carta de Intención para la Bolsa Mercantil.</p>
+        <div class="grid grid-cols-5 gap-4">
+          <div class="col-span-2 bg-white rounded-xl border border-slate-200 p-4 space-y-3">
+            <div class="font-semibold">1 · Identifique la operación</div>
+            <div><div class="text-[11px] text-slate-500">Entidad</div><div class="border rounded-lg px-3 py-2 bg-slate-50">Procuraduría General de la Nación</div></div>
+            <div>
+              <div class="text-[11px] text-slate-500">ID del proceso <span class="text-slate-400">(generado automáticamente)</span></div>
+              <div class="border rounded-lg px-3 py-2 bg-slate-50 flex items-center gap-2">
+                <span class="font-mono font-semibold text-slate-800">AGL-2026-PGN41</span>
+                <span class="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Asignado</span>
+              </div>
+            </div>
+            <div><div class="text-[11px] text-slate-500">Modalidad detectada</div><div class="border rounded-lg px-3 py-2 bg-slate-50">Selección abreviada · Bolsa de Productos (BMC)</div></div>
+            <div class="rounded-lg bg-indigo-50 text-indigo-700 p-3 text-[12px]">💡 Aunque no domine las fichas FTN y FTP, le iremos guiando campo por campo.</div>
+          </div>
+          <div class="col-span-3 bg-white rounded-xl border border-slate-200 p-4">
+            <div class="font-semibold mb-2">2 · Cargue los documentos</div>
+            <div class="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3 mb-3">
+              <div class="flex items-center justify-between mb-2">
+                <div class="flex items-center gap-2">
+                  <span class="text-[11px] font-semibold uppercase tracking-wide text-emerald-700">Documento de referencia</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded-full bg-red-100 text-red-700">Requerido</span>
+                </div>
+                <span class="text-[11px] text-emerald-700">Muestra incluida</span>
+              </div>
+              <div class="text-[11px] text-slate-500 mb-2">El <b>estudio previo</b> es el documento de referencia. Esta demo trae un estudio previo de ejemplo (con inconsistencias sembradas) listo para analizar.</div>
+              <div class="flex items-center gap-3 border border-emerald-300 bg-white rounded-lg px-3 py-2">
+                <span class="text-lg">📄</span>
+                <div class="flex-1">
+                  <div class="font-medium">estudio_previo_pgn_inconsistencias.txt <span class="text-[10px] px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 align-middle">Muestra</span></div>
+                  <div class="text-[11px] text-slate-500">Estudio previo PGN AGL-2026-PGN41</div>
+                </div>
+                <span class="text-emerald-600 text-[12px]">✓ Listo</span>
+              </div>
+            </div>
+            <div class="flex justify-end">
+              <button id="btn-analizar" data-go="datos" class="px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold disabled:opacity-50">Analizar documentos →</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Screen 2 -->
+      <section id="datos" data-screen hidden class="h-full p-5 overflow-y-auto">
+        <div class="flex items-center justify-between mb-3">
+          <div><h1 class="text-xl font-bold">Esto es lo que encontramos</h1><p class="text-slate-500">Cada dato muestra su fuente y su ubicación exacta. Confirme o corrija antes de continuar.</p></div>
+          <div class="flex gap-2 text-[11px]"><span id="badge-datos" class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">0 identificados</span><span id="badge-revisar" class="px-2 py-1 rounded-full bg-amber-100 text-amber-700">0 por revisar</span></div>
+        </div>
+        <div class="grid grid-cols-5 gap-4">
+          <div class="col-span-3 bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <table class="w-full text-left">
+              <thead class="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th class="px-3 py-2">Dato</th><th class="px-3 py-2">Valor extraído</th><th class="px-3 py-2">Ubicación</th><th class="px-3 py-2"></th></tr></thead>
+              <tbody id="tbl-datos" class="divide-y"><tr><td class="px-3 py-3 text-slate-400" colspan="4">Analice los documentos para ver los datos extraídos.</td></tr></tbody>
+            </table>
+          </div>
+          <div class="col-span-2 bg-white rounded-xl border border-slate-200 p-4">
+            <div class="font-semibold mb-1">🧭 Resumen del análisis</div>
+            <p class="text-[11px] text-slate-500 mb-3">Estado del documento procesado por el pipeline local.</p>
+            <div id="resumen-analisis" class="text-[12px] text-slate-600">Sin análisis todavía.</div>
+          </div>
+        </div>
+        <div class="flex justify-between mt-4">
+          <button data-go="cargar" class="px-4 py-2 rounded-lg border bg-white">← Volver</button>
+          <button data-go="borradores" class="px-5 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">✨ Ver borradores y alertas →</button>
+        </div>
+      </section>
+
+      <!-- Screen 3 -->
+      <section id="borradores" data-screen hidden class="h-full p-5 flex flex-col">
+        <div class="flex items-center justify-between mb-3 shrink-0">
+          <div><h1 class="text-xl font-bold">Borradores y verificación cruzada</h1><p class="text-slate-500">AgilIA marca contradicciones y riesgos. Cada hallazgo es una <b>posibilidad editable</b>: usted decide si lo acepta o lo rechaza con justificación.</p></div>
+          <div class="flex gap-2 text-[11px]"><span id="badge-alertas" class="px-2 py-1 rounded-full bg-red-100 text-red-700">0 alertas</span></div>
+        </div>
+        <div class="grid grid-cols-5 gap-4 flex-1 min-h-0">
+          <div class="col-span-3 bg-white rounded-xl border border-slate-200 flex flex-col min-h-0">
+            <div class="px-4 py-2.5 border-b flex items-center justify-between shrink-0">
+              <div class="font-semibold text-[12px]">Borrador generado (FTN · FTP · Carta) <span id="draft-version" class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 align-middle"></span></div>
+              <button id="btn-recargar-draft" class="text-[11px] text-emerald-700 underline">recargar</button>
+            </div>
+            <div class="flex-1 min-h-0 overflow-y-auto p-4">
+              <pre id="draft-content" class="text-[12px] text-slate-700">Cargue y analice un documento para ver el borrador.</pre>
+            </div>
+          </div>
+          <div class="col-span-2 flex flex-col gap-2 min-h-0 overflow-y-auto">
+            <div class="text-[11px] text-slate-500 bg-slate-50 border rounded-lg px-3 py-2 shrink-0">
+              Cada alerta corresponde a un hallazgo del motor de reglas. Acéptelo o recházalo (la justificación es obligatoria al rechazar). La decisión se registra en la trazabilidad.
+            </div>
+            <div id="alertas" class="space-y-2">
+              <div class="text-[12px] text-slate-400">Sin alertas todavía.</div>
+            </div>
+            <button data-go="exportar" class="mt-auto px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shrink-0">Continuar a validación →</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Screen 4 -->
+      <section id="exportar" data-screen hidden class="h-full p-5 overflow-y-auto">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-11 h-11 rounded-full bg-emerald-100 text-2xl flex items-center justify-center">✅</div>
+          <div><h1 class="text-xl font-bold">Paquete listo para validar y radicar</h1><p class="text-slate-500">Revise el registro de decisiones y descargue el borrador editable.</p></div>
+        </div>
+        <div class="grid grid-cols-3 gap-4 mb-4">
+          <div class="bg-white rounded-xl border p-4"><div class="text-[11px] text-slate-500">Hallazgos</div><div id="stat-findings" class="text-2xl font-bold text-emerald-600">0</div><div class="text-[11px] text-slate-500">detectados por el motor de reglas</div></div>
+          <div class="bg-white rounded-xl border p-4"><div class="text-[11px] text-slate-500">Alertas de riesgo</div><div id="stat-alerts" class="text-2xl font-bold text-red-600">0</div><div class="text-[11px] text-slate-500">severidad alta / media</div></div>
+          <div class="bg-white rounded-xl border p-4"><div class="text-[11px] text-slate-500">Decisiones registradas</div><div id="stat-decisions" class="text-2xl font-bold text-indigo-600">0</div><div class="text-[11px] text-slate-500">con acción y justificación</div></div>
+        </div>
+        <div class="grid grid-cols-5 gap-4">
+          <div class="col-span-3 bg-white rounded-xl border overflow-hidden">
+            <div class="px-4 py-2 font-semibold border-b">Registro de decisiones</div>
+            <table class="w-full text-left text-[12px]">
+              <tbody id="tbl-decisiones" class="divide-y"><tr><td class="px-4 py-3 text-slate-400" colspan="3">Aún no hay decisiones registradas.</td></tr></tbody>
+            </table>
+          </div>
+          <div class="col-span-2 bg-white rounded-xl border p-4">
+            <div class="font-semibold mb-2">Exportar borrador editable</div>
+            <div class="text-[11px] text-slate-500 mb-3">Descarga el borrador en Markdown (FTN + FTP + Carta) tal como lo generó el pipeline.</div>
+            <button id="btn-download" class="w-full px-4 py-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-semibold disabled:opacity-50" disabled>⬇️ Descargar borrador (.md)</button>
+            <button data-go="cargar" class="w-full mt-2 text-[12px] text-slate-500 underline">Iniciar otra operación</button>
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+  </div>
+</div>
+
+<!-- Navigation helper (ported from product-final.html) -->
+<script>
+(function(){
+  function sync(){
+    var g=document.querySelectorAll('[data-go]');
+    for(var i=0;i<g.length;i++){var t=document.getElementById(g[i].getAttribute('data-go'));g[i].setAttribute('aria-current',t&&!t.hidden?'true':'false');}
+  }
+  function only(target){
+    var sib=target.parentElement?target.parentElement.children:[];
+    for(var i=0;i<sib.length;i++){if(sib[i].hasAttribute('data-screen'))sib[i].hidden=(sib[i]!==target);}
+    target.hidden=false;
+  }
+  document.addEventListener('click',function(e){
+    var el=e.target&&e.target.closest?e.target.closest('[data-go]'):null;
+    if(!el)return;
+    var id=el.getAttribute('data-go');var t=document.getElementById(id);
+    if(t){only(t);e.preventDefault();sync();}
+  });
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',sync);else sync();
+})();
+</script>
+<script src="app.js"></script>
+</body>
+</html>

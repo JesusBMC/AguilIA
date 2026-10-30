@@ -1,0 +1,36 @@
+# Dependencias y datos locales
+node_modules/
+.data/
+
+# Secretos (solo se sube .env.example)
+.env
+.env.*
+!.env.example
+
+# AI-DLC: archivos que pueden contener datos sensibles (ver AGENTS.md)
+aidlc-docs/audit.md
+aidlc-docs/.aidlc-recovery.md
+aidlc-docs/runtime-graph.json
+aidlc-docs/.aidlc-hooks-health/
+aidlc-docs/.aidlc-sensors/
+
+# Archivos temporales de diagnóstico en la raíz
+/btA.txt
+/btAe.txt
+/btB.txt
+/btBe.txt
+/bt_summary.txt
+/buntest.ts
+/final_status.txt
+/next1.err
+/next1.json
+/reinstall.txt
+/reinstall_read.txt
+/tool_check.txt
+/zips.txt
+/hola.md
+
+# Sistema operativo y editor
+Thumbs.db
+.DS_Store
+*.log
