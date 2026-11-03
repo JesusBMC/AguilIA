@@ -29,6 +29,22 @@ AIDLC_PROVIDER=aws     # load the thin AWS bundle
 - That's it — TypeScript is a dev dependency and runs via `bunx tsc`.
 - To deploy to AWS you also need git, Terraform ≥ 1.10 (1.11+ recommended) and AWS CLI v2 with credentials; see [docs/despliegue-aws.md](docs/despliegue-aws.md).
 
+## Nota de mantenimiento: carpeta `.worktrees/terraform-iac`
+
+La migración de la infraestructura a Terraform se construyó en una **copia de
+trabajo de git (worktree)** en `.worktrees/terraform-iac` (rama
+`feat/terraform-iac`). Ese trabajo **ya se unió a `main` y se subió a GitHub**,
+así que la carpeta es un sobrante que se conserva solo como referencia.
+
+- Está ignorada por git (`.gitignore`: `.worktrees/`), no se sube al repositorio.
+- No se trabaja ahí; el proyecto real es la raíz del repositorio.
+- Detalle y pasos para eliminarla: [`.worktrees/terraform-iac/LEEME-worktree.md`](.worktrees/terraform-iac/LEEME-worktree.md).
+- Eliminarla es seguro (el contenido ya está en `main` y en GitHub):
+  ```sh
+  git worktree remove .worktrees/terraform-iac
+  git branch -d feat/terraform-iac
+  ```
+
 ## Install, build, test
 
 ```sh
