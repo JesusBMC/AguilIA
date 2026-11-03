@@ -1,5 +1,10 @@
 # AgilIA
 
+> **¿Vas a desplegar en AWS desde otro equipo?** Empieza por
+> [`docs/agente-despliegue.md`](docs/agente-despliegue.md) (resumen y guardas
+> para el agente) y sigue la guía paso a paso en
+> [`docs/despliegue-aws.md`](docs/despliegue-aws.md).
+
 AgilIA is a document-intelligence and rule-engine service that helps public-sector teams prepare and review procurement documentation ("estudios previos" and the derived FTN / FTP / Carta de intención drafts). It extracts structured data from a procurement document, runs real business rules over it to surface inconsistencies and risk alerts (each with a location in the source, quoted evidence, and a technical explanation), generates an editable draft with placeholders for missing fields and markers on flagged fields, records human ACCEPT/REJECT decisions for full traceability, and indexes findings for search. It runs fully offline for demos and development, with a thin AWS wiring layer for the production serverless target.
 
 ## Local vs AWS provider model
