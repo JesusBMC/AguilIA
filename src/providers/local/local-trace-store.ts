@@ -106,6 +106,9 @@ export class LocalTraceStore implements TraceStore {
       justification: input.justification,
       recordedAt: new Date().toISOString(),
     };
+    if (input.recordedBy) {
+      decision.recordedBy = input.recordedBy;
+    }
     record.decisions = [...(record.decisions ?? []), decision];
     record.updatedAt = decision.recordedAt;
     await this.persist(record);

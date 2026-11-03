@@ -102,6 +102,8 @@ export interface Decision {
   justification: string;
   /** ISO-8601 timestamp. */
   recordedAt: string;
+  /** Authenticated actor (Cognito `sub`) when the API runs behind Cognito. */
+  recordedBy?: string;
 }
 
 /** A persisted version of a generated draft (R8). */

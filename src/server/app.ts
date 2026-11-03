@@ -14,12 +14,18 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { getProviders } from "../providers/index.ts";
 import type { ProviderBundle } from "../providers/interfaces.ts";
-import { registerRoutes, type BundleResolver } from "./routes.ts";
+import {
+  registerRoutes,
+  type BundleResolver,
+  type RouteOptions,
+} from "./routes.ts";
 
 /** Options for {@link buildApp}; tests may inject an isolated bundle. */
 export interface BuildAppOptions {
   /** Override the provider bundle (e.g. with temp storage dirs in tests). */
   providers?: ProviderBundle;
+  /** Deployment hooks (async upload, actor, events); absent = local behavior. */
+  routes?: RouteOptions;
 }
 
 /** Absolute path to the static web directory (`<root>/web`). */
@@ -72,11 +78,13 @@ export function buildApp(options: BuildAppOptions = {}): Hono {
   app.use("*", cors({ origin: "*", allowMethods: ["GET", "POST", "OPTIONS"] }));
 
   const getBundle = memoizedBundle(options.providers);
-  registerRoutes(app, getBundle);
+  registerRoutes(app, getBundle, options.routes);
 
-  // Static SPA: index at "/" and "/index.html", plus the app script.
+  // Static SPA: index at "/" and "/index.html", the runtime config (local copy:
+  // auth disabled) and the app script.
   app.get("/", () => serveWebFile("index.html"));
   app.get("/index.html", () => serveWebFile("index.html"));
+  app.get("/config.js", () => serveWebFile("config.js"));
   app.get("/app.js", () => serveWebFile("app.js"));
 
   return app;

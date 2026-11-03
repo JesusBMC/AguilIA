@@ -229,4 +229,20 @@ describe("AgilIA HTTP server (in-process)", () => {
     const body = (await res.json()) as { error: { code: string } };
     expect(body.error.code).toBe("VALIDATION");
   });
+
+  test("GET /config.js serves the local runtime config", async () => {
+    const res = await get("/config.js");
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type") ?? "").toContain("javascript");
+    const body = await res.text();
+    expect(body).toContain("authMode");
+    expect(body).toContain('"none"');
+  });
+
+  test("GET /health still reports auth 'none' locally", async () => {
+    const res = await get("/health");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { status: string; auth: string };
+    expect(body).toEqual({ status: "ok", auth: "none" });
+  });
 });

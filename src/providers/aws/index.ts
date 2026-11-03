@@ -18,6 +18,8 @@ import { AwsDraftGenerator } from "./aws-draft-generator.ts";
 import { AwsStorage } from "./aws-storage.ts";
 import { AwsTraceStore } from "./aws-trace-store.ts";
 import { AwsSearchIndex } from "./aws-search-index.ts";
+import { DynamoFindingsSearchIndex } from "./aws-dynamo-search-index.ts";
+import { resolveAwsSettings } from "./aws-common.ts";
 
 /**
  * Assemble the AWS {@link ProviderBundle} for the given config. Clients are
@@ -25,6 +27,7 @@ import { AwsSearchIndex } from "./aws-search-index.ts";
  * missing required configuration surfaces immediately as an AwsConfigError.
  */
 export function buildAwsProviders(config: AppConfig): ProviderBundle {
+  const settings = resolveAwsSettings(config);
   return {
     documentExtractor: new AwsDocumentExtractor(config),
     nlpAnalyzer: new AwsNlpAnalyzer(config),
@@ -32,6 +35,9 @@ export function buildAwsProviders(config: AppConfig): ProviderBundle {
     draftGenerator: new AwsDraftGenerator(config),
     storage: new AwsStorage(config),
     traceStore: new AwsTraceStore(config),
-    searchIndex: new AwsSearchIndex(config),
+    searchIndex:
+      settings.searchBackend === "opensearch"
+        ? new AwsSearchIndex(config)
+        : new DynamoFindingsSearchIndex(config),
   };
 }

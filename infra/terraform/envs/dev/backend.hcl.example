@@ -1,0 +1,5 @@
+# Ejemplo de backend.hcl. El archivo real lo genera infra/terraform/bootstrap
+# (está en .gitignore). Uso: terraform init -backend-config=backend.hcl
+bucket = "agilia-tfstate-<ID_DE_CUENTA>-us-east-2"
+key    = "agilia/dev/terraform.tfstate"
+region = "us-east-2"

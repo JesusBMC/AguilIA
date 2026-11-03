@@ -72,6 +72,8 @@ export interface DecisionInput {
   findingId: string;
   action: DecisionAction;
   justification: string;
+  /** Authenticated actor (Cognito `sub`), when known. */
+  recordedBy?: string;
 }
 
 /** R4/R7/R8: the traceability store for documents, decisions, versions. */

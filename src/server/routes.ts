@@ -8,6 +8,7 @@
  */
 
 import type { Context, Hono } from "hono";
+import type { DocumentStatus } from "../domain/types.ts";
 import type { ProviderBundle } from "../providers/interfaces.ts";
 import { runPipeline } from "../pipeline/pipeline.ts";
 import {
@@ -27,6 +28,38 @@ import {
 
 /** Resolves the one shared provider bundle (built once, reused per request). */
 export type BundleResolver = () => Promise<ProviderBundle>;
+
+/** A validated upload, as handed to an asynchronous submitter. */
+export interface UploadSubmission {
+  filename: string;
+  text?: string;
+  contentBase64?: string;
+  metadata?: { entidad?: string; procesoId?: string };
+}
+
+/**
+ * Optional hooks that change how routes behave when deployed (e.g. on AWS
+ * Lambda). With no options every route keeps its local, synchronous behavior.
+ */
+export interface RouteOptions {
+  /**
+   * When set, uploads are accepted asynchronously: the validated body is
+   * handed to this function and the route answers 202 instead of running the
+   * pipeline inline.
+   */
+  submitUpload?: (
+    input: UploadSubmission,
+  ) => Promise<{ documentId: string; status: DocumentStatus }>;
+  /** Resolve the authenticated actor (e.g. the Cognito `sub`) for a request. */
+  resolveActor?: (c: Context) => string | undefined;
+  /** Publish a domain event. Failures are logged and never fail the request. */
+  onEvent?: (
+    detailType: string,
+    detail: Record<string, unknown>,
+  ) => Promise<void>;
+  /** Auth mode reported by /health. */
+  authMode?: "none" | "cognito";
+}
 
 /** Read and JSON-parse a request body, mapping a bad body to a 400. */
 async function readJsonBody(c: Context): Promise<unknown> {
@@ -59,17 +92,38 @@ async function guard(
 }
 
 /** Register every AgilIA route onto `app`, backed by `getBundle`. */
-export function registerRoutes(app: Hono, getBundle: BundleResolver): void {
+export function registerRoutes(
+  app: Hono,
+  getBundle: BundleResolver,
+  options: RouteOptions = {},
+): void {
   // Liveness probe (handy for the UI / manual checks).
-  app.get("/health", (c) => c.json({ status: "ok", auth: "none" }, 200));
+  app.get("/health", (c) =>
+    c.json({ status: "ok", auth: options.authMode ?? "none" }, 200),
+  );
 
-  // POST /documents/upload — run the full pipeline synchronously.
-  app.post("/documents/upload", (c) =>
-    guard(c, "POST /documents/upload", async () => {
+  // Upload handler shared by POST /documents/upload (SPA) and POST /documents
+  // (API Gateway parity). Without `submitUpload` it runs the full pipeline
+  // synchronously (201); with it, the upload is queued and answered with 202.
+  const handleUpload = (c: Context) =>
+    guard(c, `POST ${c.req.path}`, async () => {
       const raw = await readJsonBody(c);
       const parsed = parseUploadBody(raw);
       if (!parsed.ok) {
         throw validationFailed(parsed.error);
+      }
+
+      if (options.submitUpload) {
+        const submitted = await options.submitUpload({
+          filename: parsed.data.filename,
+          text: parsed.data.text,
+          contentBase64: parsed.data.contentBase64,
+          metadata: parsed.data.metadata,
+        });
+        return c.json(
+          { documentId: submitted.documentId, status: submitted.status },
+          202 satisfies HttpStatus,
+        );
       }
 
       const providers = await getBundle();
@@ -93,8 +147,10 @@ export function registerRoutes(app: Hono, getBundle: BundleResolver): void {
         },
         201 satisfies HttpStatus,
       );
-    }),
-  );
+    });
+
+  app.post("/documents/upload", handleUpload);
+  app.post("/documents", handleUpload);
 
   // GET /documents/:id — full persisted record, or 404.
   app.get("/documents/:id", (c) =>
@@ -174,6 +230,7 @@ export function registerRoutes(app: Hono, getBundle: BundleResolver): void {
         findingId: parsed.data.findingId,
         action: parsed.data.action,
         justification,
+        recordedBy: options.resolveActor?.(c),
       });
 
       // Non-blocking nudge: a REJECT with no justification is still recorded,
@@ -187,6 +244,19 @@ export function registerRoutes(app: Hono, getBundle: BundleResolver): void {
                 "Rechazaste la observación sin justificar. Se recomienda dejar una justificación para el registro de evidencia.",
             }
           : null;
+
+      // The decision is already persisted; a failed event must not undo the
+      // response, so it is logged instead of propagated.
+      try {
+        await options.onEvent?.("DecisionRecorded", {
+          documentId: id,
+          decisionId: decision.id,
+          findingId: decision.findingId,
+          action: decision.action,
+        });
+      } catch (err) {
+        logError("POST /documents/:id/decision onEvent", err);
+      }
 
       return c.json(
         { decisionId: decision.id, recordedAt: decision.recordedAt, alert },

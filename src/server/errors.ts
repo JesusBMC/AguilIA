@@ -11,7 +11,7 @@ import { redactForLog } from "../config.ts";
 import type { ValidationError } from "./schemas.ts";
 
 /** HTTP status codes this server can return. */
-export type HttpStatus = 200 | 201 | 400 | 404 | 500;
+export type HttpStatus = 200 | 201 | 202 | 400 | 404 | 500;
 
 export type ErrorCode = "VALIDATION" | "NOT_FOUND" | "INTERNAL";
 

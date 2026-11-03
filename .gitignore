@@ -34,3 +34,29 @@ aidlc-docs/.aidlc-sensors/
 Thumbs.db
 .DS_Store
 *.log
+
+.worktrees/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+infra/terraform/envs/*/backend.hcl
+# Planes guardados con terraform plan -out (pueden incluir valores sensibles)
+tfplan
+*.tfplan
+
+# Build de Lambdas y herramientas locales
+dist/
+build/
+.tools/

@@ -1,0 +1,23 @@
+# Copie este archivo como terraform.tfvars (está en .gitignore) y ajuste los valores.
+# Solo budget_alert_email es obligatorio; el resto muestra los valores por defecto.
+
+# Correo que recibe las alertas del presupuesto mensual (obligatorio).
+budget_alert_email = "su-correo@ejemplo.com"
+
+# Región de AWS del bucket de estado.
+# aws_region = "us-east-2"
+
+# Prefijo de los nombres de recursos.
+# project_name = "agilia"
+
+# Entornos para los que se genera envs/<entorno>/backend.hcl.
+# environments = ["dev"]
+
+# Crear el presupuesto mensual con alertas.
+# enable_budget = true
+
+# Límite mensual del presupuesto en USD.
+# budget_limit_usd = 100
+
+# Umbrales de costo real (USD) que envían una alerta por correo.
+# budget_thresholds_usd = [20, 50, 80]

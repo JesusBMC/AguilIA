@@ -93,9 +93,11 @@ export async function runPipeline(
   );
   draft.documentId = documentId;
 
+  // Saved as VALIDATED first: readers (the SPA and the smoke test poll for
+  // DRAFTED) must not see DRAFTED before the draft version exists.
   const record: DocumentRecord = {
     documentId,
-    status: "DRAFTED",
+    status: "VALIDATED",
     filename: input.filename,
     extracted,
     findings,
@@ -105,9 +107,10 @@ export async function runPipeline(
     createdAt: now,
     updatedAt: now,
   };
+  let drafted: DocumentRecord = { ...record, status: "DRAFTED" };
 
   await stage("persist", async () => {
-    // 1. Save the document record first (addVersion requires it to exist).
+    // 1. Save the VALIDATED record first (addVersion requires it to exist).
     await providers.traceStore.saveDocument(record);
 
     // 2. Persist the NLP trace + draft blob.
@@ -128,8 +131,19 @@ export async function runPipeline(
 
     // 4. Index findings for lexical search.
     await providers.searchIndex.index(findings, documentId);
+
+    // 5. Only now mark the record DRAFTED, carrying the stored versions so a
+    //    store that keeps them inside the record does not lose them.
+    const versions = await providers.traceStore.listVersions(documentId);
+    drafted = {
+      ...record,
+      status: "DRAFTED",
+      versions,
+      updatedAt: new Date().toISOString(),
+    };
+    await providers.traceStore.saveDocument(drafted);
   });
 
   const persisted = await providers.traceStore.getDocument(documentId);
-  return persisted ?? record;
+  return persisted ?? drafted;
 }

@@ -100,10 +100,10 @@ All inputs validated with zod at the boundary; all I/O wrapped so there are no s
       Files: `src\providers\aws\aws-storage.ts`, `src\providers\aws\aws-trace-store.ts`, `src\providers\aws\aws-search-index.ts`, `src\providers\aws\aws-document-extractor.ts`, `src\providers\aws\aws-nlp-analyzer.ts`, `src\providers\aws\aws-rule-validator.ts`, `src\providers\aws\aws-draft-generator.ts`, `src\providers\aws\index.ts`
       Verify: `bunx tsc --noEmit` — whole project (local + aws) typechecks.
 
-- [ ] 9. **Extend iac/template.yaml (do NOT rewrite).**
+- [ ] 9. **Extend iac/template.yaml (eliminado; reemplazado por infra/terraform/) (do NOT rewrite).**
       Add the missing read paths and wiring the brief calls out: `GET /documents/{id}` + `GET /documents/{id}/draft` (new `DraftRetrieverFunction`), `GET /search` (`search` resource + `SearchHandlerFunction`), their Cognito-authorized methods, API-invoke permissions, and add the new methods to `ApiGatewayDeployment.DependsOn`. Fix the broken event chain (Textract emits `ExtractionStarted` while `TextExtractedRule` matches `TextExtracted`). Keep SSE/KMS encryption, least-privilege IAM, no PII in logs.
-      Files: `c:\Users\jparrap\AgilIA-AWS\iac\template.yaml`
-      Verify: `bunx --yes cfn-lint iac/template.yaml` if available; otherwise `bun -e "import('yaml').then(...)"` YAML parse + grep that the new logical ids resolve. Document the exact check in README.
+      Files: `c:\Users\jparrap\AgilIA-AWS\iac\template.yaml (eliminado; reemplazado por infra/terraform/)`
+      Verify: `bunx --yes cfn-lint iac/template.yaml (eliminado; reemplazado por infra/terraform/)` if available; otherwise `bun -e "import('yaml').then(...)"` YAML parse + grep that the new logical ids resolve. Document the exact check in README.
 
 - [ ] 10. **README.**
       What AgilIA is (1 paragraph), local-vs-aws provider model, install/build/test (`bun install`, `bunx tsc --noEmit`, `bun test`), run the demo (`bun run dev`, open `web/index.html` against `http://localhost:8787`), seeded sample flow, and known MVP gaps (no local auth = Cognito is the prod boundary; thin aws provider; R13/R15/R16/R17 operational/deferred; R-coverage table).

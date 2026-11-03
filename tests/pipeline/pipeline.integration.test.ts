@@ -108,3 +108,53 @@ describe("runPipeline — inconsistencias sample", () => {
     await expect(runPipeline({ filename: "x", text: "y" }, null)).rejects.toThrow();
   });
 });
+
+describe("runPipeline — DRAFTED only after the draft version exists", () => {
+  test("the record read between saveDocument and addVersion is not DRAFTED", async () => {
+    const { providers } = buildTestProviders();
+    const store = providers.traceStore;
+    const statusesAtAddVersion: (string | undefined)[] = [];
+    const versionsWhenDrafted: number[] = [];
+
+    const originalAddVersion = store.addVersion.bind(store);
+    store.addVersion = async (documentId, version) => {
+      statusesAtAddVersion.push((await store.getDocument(documentId))?.status);
+      return originalAddVersion(documentId, version);
+    };
+    const originalSave = store.saveDocument.bind(store);
+    store.saveDocument = async (doc) => {
+      if (doc.status === "DRAFTED") {
+        versionsWhenDrafted.push((await store.listVersions(doc.documentId)).length);
+      }
+      return originalSave(doc);
+    };
+
+    const result = await runPipeline(
+      { filename: "orden.txt", text: await readFile(SAMPLE_PATH, "utf8") },
+      providers,
+    );
+
+    expect(statusesAtAddVersion).toEqual(["VALIDATED"]);
+    expect(versionsWhenDrafted).toEqual([1]);
+    expect(result.status).toBe("DRAFTED");
+    expect(result.versions.map((v) => v.version)).toEqual([1]);
+  });
+
+  test("a failure while persisting the draft leaves the record not DRAFTED", async () => {
+    const { providers } = buildTestProviders();
+    const originalPut = providers.storage.put.bind(providers.storage);
+    providers.storage.put = async (key, content) => {
+      if (key.startsWith("drafts/")) throw new Error("disk full");
+      return originalPut(key, content);
+    };
+    const documentId = "persist-failure-doc";
+
+    await expect(
+      runPipeline({ documentId, filename: "x.txt", text: "ESTUDIO PREVIO" }, providers),
+    ).rejects.toThrow(/stage "persist" failed/);
+
+    const stored = await providers.traceStore.getDocument(documentId);
+    expect(stored?.status).toBe("VALIDATED");
+    expect(stored?.versions).toEqual([]);
+  });
+});

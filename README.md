@@ -22,16 +22,19 @@ AIDLC_PROVIDER=aws     # load the thin AWS bundle
 
 - **[bun](https://bun.sh) 1.4.4+** as both runtime and package manager. `node` and `git` are not required.
 - That's it — TypeScript is a dev dependency and runs via `bunx tsc`.
+- To deploy to AWS you also need git, Terraform ≥ 1.10 (1.11+ recommended) and AWS CLI v2 with credentials; see [docs/despliegue-aws.md](docs/despliegue-aws.md).
 
 ## Install, build, test
 
 ```sh
 bun install            # install dependencies
 bunx tsc --noEmit      # type-check the whole project (local + aws providers)
-bun test               # run the full test suite (providers, rules, draft, pipeline, server)
+bun test               # run the full test suite (providers, rules, draft, pipeline, server, lambda, infra)
+bun run build:lambda   # bundle the two AWS Lambdas into dist/lambda/{api,worker}/index.mjs
+bun run verify:lambda  # import the bundles and invoke GET /health offline (no AWS calls)
 ```
 
-All three are green from a clean checkout. The server tests run in-process via Hono's `app.fetch(new Request(...))` — no socket is opened and nothing is left running.
+The first three are green from a clean checkout; the Lambda commands are only needed before a Terraform deploy. The server tests run in-process via Hono's `app.fetch(new Request(...))` — no socket is opened and nothing is left running.
 
 ## Run the local demo
 
@@ -66,32 +69,53 @@ The local server mirrors the API Gateway design (same paths, no auth locally):
 | `GET /documents/:id/draft` | Fetch the generated draft (`?download=1` for an attachment) |
 | `POST /documents/:id/decision` | Record an ACCEPT/REJECT decision (justification required on REJECT) |
 | `GET /search?q=` | Lexical search over findings |
+| `GET /health` | Liveness probe: `{"status":"ok","auth":"none"}` locally, `"auth":"cognito"` on AWS |
+
+`POST /documents` is an alias of `POST /documents/upload`. On AWS every route except `GET /health` requires a Cognito ID token in the `Authorization` header, and the upload is asynchronous (202 + polling, see [Infrastructure as code](#infrastructure-as-code)).
 
 ## Infrastructure as code
 
-`iac/template.yaml` is a CloudFormation template for the AWS serverless target: S3 (documents, versioned + encrypted), DynamoDB (`agilia-traceability`, `agilia-findings`), SQS + DLQ, EventBridge (the event-driven processing chain), Cognito (user pool + groups — the production auth boundary), Secrets Manager, OpenSearch (in-VPC), a VPC with public/private subnets and NAT, least-privilege IAM, Python Lambdas, API Gateway (Cognito-authorized), CloudWatch dashboards/alarms, X-Ray, and CloudTrail.
+The AWS deployment (region `us-east-2`) is defined with **Terraform** under `infra/terraform/`. It replaces the earlier CloudFormation template, which has been removed. Everything in AWS is created, updated and destroyed with Terraform.
 
-This MVP **extends** the existing template (no existing resource was removed or rewritten) with:
+- **Step-by-step deployment guide (Spanish, PowerShell + bash):** [docs/despliegue-aws.md](docs/despliegue-aws.md). It covers prerequisites, credentials, Bedrock access, the first Cognito user, smoke tests, updates, rollback, teardown, troubleshooting and estimated costs.
+- **Architecture (Spanish, Mermaid diagram + text version):** [docs/terraform-arquitectura.md](docs/terraform-arquitectura.md).
 
-- `DraftRetrieverFunction` (reads the draft from S3 + version history from DynamoDB) backing `GET /documents/{documentId}` and `GET /documents/{documentId}/draft`.
-- `SearchHandlerFunction` + a dedicated least-privilege `SearchHandlerRole` (OpenSearch read-only + VPC access), backing `GET /search`.
-- The matching `AWS::Lambda::Permission` entries for API Gateway to invoke each new function, and the new methods added to `ApiGatewayDeployment.DependsOn`.
-- A fix to the EventBridge chain: `TextractProcessorFunction` emits detail-type `ExtractionStarted`, but `TextExtractedRule` matched the stale value `TextExtracted`, so the Textract → Comprehend hop never fired. The rule now matches `ExtractionStarted` (documented inline in the template).
+Layout:
 
-Lint / validate the template with the AWS CLI or `cfn-lint`:
+```
+infra/terraform/
+  bootstrap/   # run once per account, local state: S3 state bucket, AWS Budgets, writes envs/dev/backend.hcl
+  envs/dev/    # the dev environment root, remote state in S3 with native locking (use_lockfile)
+  modules/     # storage, messaging, auth, lambda_function, api, frontend, search, observability
+```
+
+What `envs/dev` deploys:
+
+- **Two Node.js Lambdas built from this repo** by `bun run build:lambda` (`dist/lambda/{api,worker}/index.mjs`, zipped by Terraform). `agilia-api-dev` runs the same Hono app behind API Gateway (REST, Cognito authorizer on every route except `GET /health`). `agilia-worker-dev` consumes the SQS queue and runs the full pipeline with the AWS providers (Textract, Comprehend, Bedrock, S3, DynamoDB). Both publish versions behind a `live` alias, which is the fast-rollback point.
+- **Asynchronous upload on AWS.** `POST /documents/upload` (and its alias `POST /documents`) stores the input in S3, queues it in SQS, emits an EventBridge event and returns **202** `{documentId, status: "RECEIVED"}`. The SPA polls `GET /documents/{id}` until `DRAFTED` or `ERROR`. Locally the route stays synchronous (201).
+- **SPA on S3 + CloudFront** (private bucket, OAC). The API is served through the same distribution, so the browser calls it same-origin. Terraform uploads `web/` and a generated `config.js` with the Cognito settings; users sign in through the Cognito hosted UI (OAuth code + PKCE).
+- S3 documents bucket, DynamoDB traceability and findings tables, SQS queue + DLQ, EventBridge bus, Cognito user pool and groups, an optional Secrets Manager secret, CloudWatch alarms and dashboard, SNS alerts topic, X-Ray group and CloudTrail.
+
+Cost controls are variables in `envs/dev/terraform.tfvars`: `enable_opensearch` (default `false`; search then runs over the DynamoDB findings table), `enable_cloudtrail`, `enable_xray_tracing`, `enable_pitr`, `enable_rules_secret`, API throttling and `worker_max_concurrency`. The VPC, NAT Gateway and ElastiCache from the old template are omitted because no code needs them. The bootstrap root creates an **AWS Budgets** monthly budget (default USD 100 with e-mail alerts at USD 20/50/80, credits excluded so the alerts fire).
+
+Validate offline (no AWS credentials needed):
 
 ```sh
-aws cloudformation validate-template --template-body file://iac/template.yaml
-# or
-cfn-lint iac/template.yaml
+terraform fmt -check -recursive infra/terraform
+terraform -chdir=infra/terraform/bootstrap init -backend=false
+terraform -chdir=infra/terraform/bootstrap validate
+terraform -chdir=infra/terraform/envs/dev init -backend=false
+terraform -chdir=infra/terraform/envs/dev validate
 ```
 
 ## Known MVP gaps
 
-- **No local authentication.** The local Hono server is unauthenticated by design; **Amazon Cognito is the production auth boundary** (wired in `iac/template.yaml` on every API Gateway method). This is surfaced loudly (server boot warning + UI banner), never silent.
-- **Thin AWS provider.** `src/providers/aws/` compiles, constructs real SDK clients, calls each service, and handles SDK errors — but response-to-domain mapping is intentionally minimal. Incomplete spots are marked `// FUTURE WIRING` (e.g. Textract block → structured fields, Bedrock output → typed findings/sections, DynamoDB per-attribute projection, OpenSearch SigV4 signing). The local bundle is the complete, demoable path.
+- **No local authentication.** The local Hono server is unauthenticated by design; **Amazon Cognito is the production auth boundary** (defined in `infra/terraform/` on every API Gateway method except `GET /health`). This is surfaced loudly (server boot warning + UI banner), never silent.
+- **AWS path validated offline only.** Nothing has been applied to a real AWS account from the development machine. The AWS path is checked with `terraform validate`, the bun test suite and `bun run verify:lambda` (which imports the bundles in bun, not in the Lambda Node.js runtime). The first real deploy is the end-to-end test; [docs/despliegue-aws.md](docs/despliegue-aws.md) lists the smoke tests.
+- **Thin AWS provider.** `src/providers/aws/` compiles, constructs real SDK clients, calls each service, and handles SDK errors — but response-to-domain mapping is intentionally minimal. Incomplete spots are marked `// FUTURE WIRING` (e.g. Textract block → structured fields, Bedrock output → typed findings/sections, DynamoDB per-attribute projection). The local bundle is the complete, demoable path.
+- **AWS session limits.** The SPA does not renew tokens (sign in again after about 1 hour) and routes do not check Cognito groups. Lambda request payloads are capped at 6 MB, so large `contentBase64` uploads fail; the SPA sends text. Without OpenSearch, search scans the DynamoDB findings table (fine at MVP volume).
 - **DOCX export deferred.** Drafts are structured sections plus editable **Markdown** (viewed/downloaded in the UI). DOCX generation is a future enhancement; editable Markdown satisfies the editable-format requirement for the MVP.
-- **Operational requirements deferred.** R13/R15/R16/R17 (operational concerns) are out of scope for this MVP and are handled at the infrastructure/operations layer (`iac/template.yaml` observability, alarms, audit trail) rather than in application code.
+- **Operational requirements deferred.** R13/R15/R16/R17 (operational concerns) are out of scope for this MVP and are handled at the infrastructure/operations layer (`infra/terraform/` observability, alarms, audit trail) rather than in application code.
 
 ### R1–R12 coverage
 
@@ -105,7 +129,7 @@ cfn-lint iac/template.yaml
 | R6 — evidence + explanation | Each finding carries quoted `evidence` + a technical `message` |
 | R7 — decisions | `POST /documents/:id/decision`, persisted and auditable |
 | R8 — version history | `TraceStore.addVersion` / `listVersions`, per-document |
-| R9 — authentication | **Deferred locally**; Cognito is the production boundary (IaC) |
+| R9 — authentication | **Deferred locally**; Cognito is the production boundary (Terraform, SPA hosted-UI login) |
 | R10 — institutional rules source | Local `src/rules/rule-definitions.ts` stands in for Secrets Manager |
 | R11 — coherence validation | The seven real rules in `rule-definitions.ts` (coherence/inconsistency) |
 | R12 — risk alerts | HIGH-severity findings carry a `riskAlert` early warning |
@@ -122,7 +146,10 @@ src/pipeline/      # the extract→analyze→validate→draft→persist orchestr
 src/server/        # Hono app, routes, zod schemas, error handling
 web/               # static single-page UI (Tailwind CDN)
 samples/           # plain-text estudios previos (clean + seeded-defects)
+src/lambda/        # AWS Lambda entry points: api (Hono behind API Gateway) and worker (SQS)
 scripts/seed.ts    # seeded sample runner (bun run seed)
-tests/             # bun:test suites (providers, rules, draft, pipeline, server)
-iac/template.yaml  # CloudFormation for the AWS serverless target
+scripts/build-lambda.ts, scripts/verify-lambda-bundle.ts  # bun run build:lambda / verify:lambda
+tests/             # bun:test suites (providers, rules, draft, pipeline, server, lambda, infra)
+infra/terraform/   # Terraform for the AWS deployment (bootstrap, envs/dev, modules)
+docs/              # Spanish deployment guide and architecture (despliegue-aws.md, terraform-arquitectura.md)
 ```

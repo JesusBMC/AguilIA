@@ -1,11 +1,13 @@
 /**
  * Thin DynamoDB-backed {@link TraceStore} implementation.
  *
- * Single-table design on the `agilia-traceability` table (PK/SK), mirroring
- * the item shape the CloudFormation Lambdas write:
+ * Single-table design on the `agilia-traceability` table (PK/SK), following
+ * the single-table design documented in infra/terraform/modules/storage:
  *   - Document record:  PK=`DOC#<id>`  SK=`METADATA`
  *   - Draft version:    PK=`DOC#<id>`  SK=`VERSION#<zero-padded>`
  *   - Decision:         PK=`DOC#<id>`  SK=`DECISION#<id>`
+ *                       (+ GSI1PK=`USER#<sub>`, GSI1SK=recordedAt when the
+ *                       actor is known, so decisions are queryable per user)
  * Findings are additionally projected into the `agilia-findings` table on
  * save so the findings table stays queryable per the IaC design.
  *
@@ -38,16 +40,19 @@ import {
 
 const METADATA_SK = "METADATA";
 
+/** The slice of the DynamoDB client this store uses (injectable for tests). */
+export type DynamoSender = Pick<DynamoDBClient, "send">;
+
 export class AwsTraceStore implements TraceStore {
-  private readonly client: DynamoDBClient;
+  private readonly client: DynamoSender;
   private readonly traceabilityTable: string;
   private readonly findingsTable: string;
 
-  constructor(config: AppConfig) {
+  constructor(config: AppConfig, client?: DynamoSender) {
     const settings = resolveAwsSettings(config);
     this.traceabilityTable = settings.traceabilityTable;
     this.findingsTable = settings.findingsTable;
-    this.client = new DynamoDBClient({ region: settings.region });
+    this.client = client ?? new DynamoDBClient({ region: settings.region });
   }
 
   async saveDocument(record: DocumentRecord): Promise<void> {
@@ -86,6 +91,11 @@ export class AwsTraceStore implements TraceStore {
     }
   }
 
+  /**
+   * Read the METADATA item and merge the versions and decisions, which live
+   * in their own items (VERSION#/DECISION#) and are never folded back into
+   * the METADATA blob.
+   */
   async getDocument(documentId: string): Promise<DocumentRecord | null> {
     const result = await callService(`dynamodb:GetItem ${documentId}`, () =>
       this.client.send(
@@ -99,7 +109,14 @@ export class AwsTraceStore implements TraceStore {
     if (!raw) {
       return null;
     }
-    return parseJson<DocumentRecord>(raw, `document ${documentId}`);
+    const record = parseJson<DocumentRecord>(raw, `document ${documentId}`);
+    record.versions = (await this.listVersions(documentId)).sort(
+      (a, b) => a.version - b.version,
+    );
+    record.decisions = (await this.listDecisions(documentId)).sort((a, b) =>
+      a.recordedAt.localeCompare(b.recordedAt),
+    );
+    return record;
   }
 
   async recordDecision(
@@ -113,15 +130,22 @@ export class AwsTraceStore implements TraceStore {
       justification: input.justification,
       recordedAt: new Date().toISOString(),
     };
+    const item: Record<string, AttributeValue> = {
+      PK: s(`DOC#${documentId}`),
+      SK: s(`DECISION#${decision.id}`),
+    };
+    if (input.recordedBy) {
+      decision.recordedBy = input.recordedBy;
+      item.recordedBy = s(input.recordedBy);
+      item.GSI1PK = s(`USER#${input.recordedBy}`);
+      item.GSI1SK = s(decision.recordedAt);
+    }
+    item.data = s(JSON.stringify(decision));
     await callService(`dynamodb:PutItem decision ${decision.id}`, () =>
       this.client.send(
         new PutItemCommand({
           TableName: this.traceabilityTable,
-          Item: {
-            PK: s(`DOC#${documentId}`),
-            SK: s(`DECISION#${decision.id}`),
-            data: s(JSON.stringify(decision)),
-          },
+          Item: item,
         }),
       ),
     );
@@ -167,31 +191,36 @@ export class AwsTraceStore implements TraceStore {
     );
   }
 
-  /** Query all items for a document whose SK starts with `skPrefix`. */
+  /** Query all items for a document whose SK starts with `skPrefix` (paginated). */
   private async queryByPrefix<T>(
     documentId: string,
     skPrefix: string,
     context: string,
   ): Promise<T[]> {
-    const result = await callService(`dynamodb:Query ${context}`, () =>
-      this.client.send(
-        new QueryCommand({
-          TableName: this.traceabilityTable,
-          KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
-          ExpressionAttributeValues: {
-            ":pk": s(`DOC#${documentId}`),
-            ":sk": s(skPrefix),
-          },
-        }),
-      ),
-    );
     const items: T[] = [];
-    for (const item of result.Items ?? []) {
-      const raw = item.data?.S;
-      if (raw) {
-        items.push(parseJson<T>(raw, context));
+    let startKey: Record<string, AttributeValue> | undefined;
+    do {
+      const result = await callService(`dynamodb:Query ${context}`, () =>
+        this.client.send(
+          new QueryCommand({
+            TableName: this.traceabilityTable,
+            KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+            ExpressionAttributeValues: {
+              ":pk": s(`DOC#${documentId}`),
+              ":sk": s(skPrefix),
+            },
+            ExclusiveStartKey: startKey,
+          }),
+        ),
+      );
+      for (const item of result.Items ?? []) {
+        const raw = item.data?.S;
+        if (raw) {
+          items.push(parseJson<T>(raw, context));
+        }
       }
-    }
+      startKey = result.LastEvaluatedKey;
+    } while (startKey);
     return items;
   }
 }

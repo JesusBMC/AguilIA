@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- CSP relaxed vs the mock: connect-src now allows the local API origin + same origin so the SPA can call the Hono server. script-src adds 'self' for app.js. -->
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.tailwindcss.com 'unsafe-inline' 'unsafe-eval'; style-src https://cdn.tailwindcss.com 'unsafe-inline'; img-src data:; font-src data:; media-src data:; connect-src 'self' http://localhost:8787 http://127.0.0.1:8787; form-action 'none'; base-uri 'none'">
+<!-- CSP relaxed vs the mock: connect-src allows same origin (Hono locally, CloudFront on AWS), the local API origin for file://, and the Cognito hosted-UI domain for the OAuth token exchange. script-src adds 'self' for config.js and app.js. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' https://cdn.tailwindcss.com 'unsafe-inline' 'unsafe-eval'; style-src https://cdn.tailwindcss.com 'unsafe-inline'; img-src data:; font-src data:; media-src data:; connect-src 'self' http://localhost:8787 http://127.0.0.1:8787 https://*.amazoncognito.com; form-action 'none'; base-uri 'none'">
 <title>AgilIA · Demo PGN</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <style>[hidden]{display:none!important}html,body{height:100%;margin:0}body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}pre{white-space:pre-wrap;word-break:break-word}</style>
@@ -51,7 +51,7 @@
   <main class="flex-1 min-w-0 flex flex-col">
     <header class="h-12 shrink-0 bg-white border-b border-slate-200 px-6 flex items-center justify-between">
       <div class="flex items-center gap-2 text-slate-500 min-w-0"><span class="shrink-0">Procuraduría General de la Nación</span><span>›</span><span class="font-medium text-slate-800 truncate">Adquisición, implementación y soporte tecnológico (cómputo, audiovisuales y periféricos)</span></div>
-      <div class="flex items-center gap-2 text-[11px] shrink-0"><span class="px-2 py-1 rounded-full bg-amber-100 text-amber-700">Borrador local</span><span class="px-2 py-1 rounded-full bg-slate-100 text-slate-600">🔓 Sin autenticación</span></div>
+      <div class="flex items-center gap-2 text-[11px] shrink-0"><span class="px-2 py-1 rounded-full bg-amber-100 text-amber-700">Borrador local</span><span id="auth-chip-none" class="px-2 py-1 rounded-full bg-slate-100 text-slate-600">🔓 Sin autenticación</span><span id="auth-user" hidden class="px-2 py-1 rounded-full bg-slate-100 text-slate-600"></span><button id="btn-login" hidden class="px-2 py-1 rounded-full bg-emerald-100 text-emerald-700">Iniciar sesión</button><button id="btn-logout" hidden class="px-2 py-1 rounded-full bg-slate-100 text-slate-600">Cerrar sesión</button></div>
     </header>
 
     <div data-screens class="flex-1 min-h-0">
@@ -207,6 +207,7 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',sync);else sync();
 })();
 </script>
+<script src="config.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -65,12 +65,17 @@ export interface AwsSettings {
   ruleModelId: string;
   draftModelId: string;
   comprehendLanguage: string;
+  /** Search backend: DynamoDB scan fallback (default) or OpenSearch. */
+  searchBackend: "dynamodb" | "opensearch";
 }
+
+/** Default Bedrock model: Claude Haiku 4.5 via the US geo inference profile. */
+const DEFAULT_BEDROCK_MODEL_ID = "us.anthropic.claude-haiku-4-5-20251001-v1:0";
 
 /**
  * Derive AWS settings from the resolved {@link AppConfig} plus a few
- * non-secret, model-specific env overrides. Table names fall back to the
- * CloudFormation defaults in `iac/template.yaml`.
+ * non-secret, model-specific env overrides. Defaults match the Terraform
+ * names in infra/terraform.
  */
 export function resolveAwsSettings(
   config: AppConfig,
@@ -87,9 +92,11 @@ export function resolveAwsSettings(
       env.AWS_DYNAMODB_FINDINGS_TABLE?.trim() || "agilia-findings-dev",
     openSearchEndpoint: config.aws.openSearchEndpoint,
     ruleModelId:
-      env.AWS_BEDROCK_RULE_MODEL_ID?.trim() || "us.anthropic.claude-opus-5-5",
+      env.AWS_BEDROCK_RULE_MODEL_ID?.trim() || DEFAULT_BEDROCK_MODEL_ID,
     draftModelId:
-      env.AWS_BEDROCK_DRAFT_MODEL_ID?.trim() || "us.anthropic.claude-opus-5-5",
+      env.AWS_BEDROCK_DRAFT_MODEL_ID?.trim() || DEFAULT_BEDROCK_MODEL_ID,
     comprehendLanguage: env.AWS_COMPREHEND_LANGUAGE?.trim() || "es",
+    searchBackend:
+      env.AWS_SEARCH_BACKEND?.trim() === "opensearch" ? "opensearch" : "dynamodb",
   };
 }

@@ -9,6 +9,8 @@
  */
 
 import { Client } from "@opensearch-project/opensearch";
+import { AwsSigv4Signer } from "@opensearch-project/opensearch/aws-v3";
+import { defaultProvider } from "@aws-sdk/credential-provider-node";
 
 import type { AppConfig } from "../../config.ts";
 import type { Finding, SearchResult, SourceLocation } from "../../domain/types.ts";
@@ -36,9 +38,16 @@ export class AwsSearchIndex implements SearchIndex {
       settings.openSearchEndpoint,
       "aws.openSearchEndpoint (AWS_OPENSEARCH_ENDPOINT)",
     );
-    // Node/SigV4 request signing against a VPC domain is // FUTURE WIRING; the
-    // thin client talks to the endpoint directly (fine for a proxied/dev domain).
-    this.client = new Client({ node: endpoint });
+    // The domain only accepts IAM-authenticated requests, so every call is
+    // SigV4-signed with the Lambda role credentials from the default chain.
+    this.client = new Client({
+      ...AwsSigv4Signer({
+        region: settings.region,
+        service: "es",
+        getCredentials: () => defaultProvider()(),
+      }),
+      node: endpoint,
+    });
   }
 
   async index(findings: Finding[], documentId: string): Promise<void> {

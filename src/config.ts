@@ -46,7 +46,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     port: readPort(env.PORT),
     dataDir: resolve(env.AIDLC_DATA_DIR?.trim() || ".data"),
     aws: {
-      region: undefinedIfEmpty(env.AWS_REGION) ?? "us-east-1",
+      region: undefinedIfEmpty(env.AWS_REGION) ?? "us-east-2",
       bucket: undefinedIfEmpty(env.AWS_S3_BUCKET),
       documentsTable: undefinedIfEmpty(env.AWS_DYNAMODB_DOCUMENTS_TABLE),
       decisionsTable: undefinedIfEmpty(env.AWS_DYNAMODB_DECISIONS_TABLE),

@@ -1,0 +1,9 @@
+[
+  { "method": "POST", "path": "/documents", "auth": "COGNITO" },
+  { "method": "POST", "path": "/documents/upload", "auth": "COGNITO" },
+  { "method": "GET", "path": "/documents/{documentId}", "auth": "COGNITO" },
+  { "method": "GET", "path": "/documents/{documentId}/draft", "auth": "COGNITO" },
+  { "method": "POST", "path": "/documents/{documentId}/decision", "auth": "COGNITO" },
+  { "method": "GET", "path": "/search", "auth": "COGNITO" },
+  { "method": "GET", "path": "/health", "auth": "NONE" }
+]

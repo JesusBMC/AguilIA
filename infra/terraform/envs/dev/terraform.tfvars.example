@@ -1,0 +1,71 @@
+# Copie este archivo como terraform.tfvars (está en .gitignore) y ajuste los valores.
+# Todas las variables tienen valor por defecto; las líneas comentadas muestran ese valor.
+
+# Correo que recibe las alarmas de CloudWatch ("" = sin suscripción).
+# Tras el primer apply, AWS envía un correo de confirmación que debe aceptar.
+alert_email = "su-correo@ejemplo.com"
+
+# Región de AWS del entorno.
+# aws_region = "us-east-2"
+
+# Prefijo de los nombres de recursos.
+# project_name = "agilia"
+
+# Entorno: dev, staging o prod.
+# environment = "dev"
+
+# Perfil de inferencia de Bedrock (Claude Haiku 4.5, perfil geográfico US).
+# Confirme el ID en la consola de Bedrock (us-east-2) y complete el formulario
+# de primer uso de Anthropic antes del primer documento.
+# bedrock_model_id = "us.anthropic.claude-haiku-4-5-20251001-v1:0"
+
+# Regiones a las que el perfil de inferencia puede enrutar (permiso IAM del modelo base).
+# bedrock_destination_regions = ["us-east-1", "us-east-2", "us-west-2"]
+
+# Runtime de Node.js de las Lambdas: nodejs24.x o nodejs22.x.
+# lambda_runtime = "nodejs24.x"
+
+# Carpeta de los bundles de Lambda ("" = <repo>/dist/lambda, creada por bun run build:lambda).
+# lambda_dist_dir = ""
+
+# Carpeta de la SPA ("" = <repo>/web).
+# web_dir = ""
+
+# Días de retención de los logs de las Lambdas.
+# log_retention_days = 14
+
+# Dominio de OpenSearch (costo mensual fijo). false = búsqueda sobre DynamoDB.
+# enable_opensearch = false
+
+# Tipo de instancia, versión y disco de OpenSearch (solo si enable_opensearch = true).
+# opensearch_instance_type  = "t3.small.search"
+# opensearch_engine_version = "OpenSearch_2.19" # por confirmar
+# opensearch_volume_size_gb = 10
+
+# Trail de CloudTrail con su bucket de auditoría.
+# enable_cloudtrail = true
+
+# Trazas de X-Ray en Lambdas y API Gateway.
+# enable_xray_tracing = true
+
+# Point-in-time recovery en DynamoDB.
+# enable_pitr = true
+
+# Secreto de reglas institucionales en Secrets Manager.
+# enable_rules_secret = true
+
+# Permitir que terraform destroy borre buckets con objetos (pérdida de datos).
+# force_destroy_buckets = false
+
+# Límites de API Gateway (solicitudes por segundo y ráfaga).
+# api_throttle_rate_limit  = 10
+# api_throttle_burst_limit = 20
+
+# Concurrencia máxima de la Lambda worker desde SQS (mínimo 2).
+# worker_max_concurrency = 2
+
+# URLs adicionales de callback/logout de Cognito.
+# cognito_extra_callback_urls = []
+
+# Clase de precio de CloudFront.
+# cloudfront_price_class = "PriceClass_100"
