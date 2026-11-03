@@ -65,9 +65,11 @@ export const uploadBodySchema = z
 export type UploadBody = z.infer<typeof uploadBodySchema>;
 
 /**
- * Decision body: `{ findingId, action, justification }`. A `justification` is
- * mandatory when the action is REJECT (you must say why you keep the finding);
- * it is optional for ACCEPT.
+ * Decision body: `{ findingId, action, justification }`. The `justification`
+ * is always OPTIONAL — nothing blocks. When a REJECT arrives without one, the
+ * route still records the decision and returns a non-blocking alert inviting
+ * the user to justify it (see routes.ts), honouring the "color + recomendación,
+ * sin bloqueantes" rule.
  */
 export const decisionBodySchema = z
   .object({
@@ -75,17 +77,7 @@ export const decisionBodySchema = z
     action: z.enum(["ACCEPT", "REJECT"]),
     justification: z.string().trim().max(5000, "justificación demasiado larga").optional(),
   })
-  .strict()
-  .refine(
-    (body) =>
-      body.action !== "REJECT" ||
-      (typeof body.justification === "string" &&
-        body.justification.trim().length > 0),
-    {
-      message: "la justificación es obligatoria cuando la acción es REJECT",
-      path: ["justification"],
-    },
-  );
+  .strict();
 
 export type DecisionBody = z.infer<typeof decisionBodySchema>;
 

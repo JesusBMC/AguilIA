@@ -186,14 +186,19 @@ describe("AgilIA HTTP server (in-process)", () => {
     expect(typeof body.recordedAt).toBe("string");
   });
 
-  test("POST /documents/:id/decision rejects REJECT without justification (400)", async () => {
+  test("POST /documents/:id/decision records a REJECT without justification (200) and returns a non-blocking alert", async () => {
     const res = await postJson(`/documents/${documentId}/decision`, {
       findingId,
       action: "REJECT",
     });
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as { error: { code: string } };
-    expect(body.error.code).toBe("VALIDATION");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      decisionId: string;
+      alert: { level: string; message: string } | null;
+    };
+    expect(typeof body.decisionId).toBe("string");
+    expect(body.alert).not.toBeNull();
+    expect(body.alert?.level).toBe("AMBAR");
   });
 
   test("POST /documents/:id/decision returns 404 for an unknown document", async () => {

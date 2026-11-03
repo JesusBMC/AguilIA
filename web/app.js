@@ -247,7 +247,7 @@
           " · Evidencia: " +
           escapeHtml(f.evidence) +
           "</div>" +
-          '<textarea data-justif rows="2" placeholder="Justificación (obligatoria para rechazar)" class="w-full border rounded-lg px-2 py-1.5 text-[11px] bg-slate-50 outline-none focus:ring-1 focus:ring-emerald-400 mb-2"></textarea>' +
+          '<textarea data-justif rows="2" placeholder="Justificación (opcional, recomendada)" class="w-full border rounded-lg px-2 py-1.5 text-[11px] bg-slate-50 outline-none focus:ring-1 focus:ring-emerald-400 mb-2"></textarea>' +
           '<div class="flex gap-2 items-center flex-wrap">' +
           '<button data-action="ACCEPT" class="px-2.5 py-1 rounded border border-emerald-300 text-emerald-700 text-[11px]">👍 Aceptar</button>' +
           '<button data-action="REJECT" class="px-2.5 py-1 rounded border border-red-300 text-red-700 text-[11px]">👎 Rechazar</button>' +
@@ -365,13 +365,8 @@
     var statusEl = card.querySelector("[data-status]");
     var justification = justifEl ? justifEl.value.trim() : "";
 
-    if (action === "REJECT" && !justification) {
-      text(statusEl, "⚠ La justificación es obligatoria para rechazar.");
-      statusEl.className = "text-[11px] text-red-600";
-      if (justifEl) justifEl.focus();
-      return;
-    }
-
+    // La justificación NUNCA es obligatoria: nada bloquea. Si se rechaza sin
+    // justificar, el servidor devuelve una alerta ámbar que mostramos abajo.
     api(
       "/documents/" + encodeURIComponent(state.documentId) + "/decision",
       {
@@ -385,15 +380,21 @@
       },
     )
       .then(function (res) {
-        text(
-          statusEl,
+        var msg =
           (action === "ACCEPT" ? "✓ Aceptada" : "✓ Rechazada") +
-            " · registrada " +
-            new Date(res.recordedAt).toLocaleTimeString(),
-        );
+          " · registrada " +
+          new Date(res.recordedAt).toLocaleTimeString();
+        if (res.alert && res.alert.message) {
+          msg += " · ⚠ " + res.alert.message;
+        }
+        text(statusEl, msg);
         statusEl.className =
           "text-[11px] " +
-          (action === "ACCEPT" ? "text-emerald-700" : "text-red-700");
+          (res.alert
+            ? "text-amber-600"
+            : action === "ACCEPT"
+              ? "text-emerald-700"
+              : "text-red-700");
         return refreshRecord();
       })
       .catch(function (err) {

@@ -169,14 +169,27 @@ export function registerRoutes(app: Hono, getBundle: BundleResolver): void {
         throw notFound(`Documento no encontrado: ${id}`);
       }
 
+      const justification = parsed.data.justification ?? "";
       const decision = await providers.traceStore.recordDecision(id, {
         findingId: parsed.data.findingId,
         action: parsed.data.action,
-        justification: parsed.data.justification ?? "",
+        justification,
       });
 
+      // Non-blocking nudge: a REJECT with no justification is still recorded,
+      // but we return an amber alert inviting the user to justify it. Nothing
+      // blocks — "color + recomendación, sin bloqueantes".
+      const alert =
+        parsed.data.action === "REJECT" && justification.trim().length === 0
+          ? {
+              level: "AMBAR" as const,
+              message:
+                "Rechazaste la observación sin justificar. Se recomienda dejar una justificación para el registro de evidencia.",
+            }
+          : null;
+
       return c.json(
-        { decisionId: decision.id, recordedAt: decision.recordedAt },
+        { decisionId: decision.id, recordedAt: decision.recordedAt, alert },
         200 satisfies HttpStatus,
       );
     }),
